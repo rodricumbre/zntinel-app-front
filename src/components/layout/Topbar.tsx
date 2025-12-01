@@ -1,6 +1,6 @@
 // src/components/layout/Topbar.tsx
 import React from "react";
-import { useAuth } from "/src/lib/auth";
+import { useAuth } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
 
 const Topbar: React.FC = () => {

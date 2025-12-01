@@ -1,7 +1,7 @@
 // src/pages/Login.tsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "/src/lib/auth";
+import { useAuth } from "@/lib/auth";
 
 const API_URL = import.meta.env.VITE_API_URL;
 

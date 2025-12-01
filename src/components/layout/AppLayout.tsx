@@ -1,7 +1,7 @@
 // src/components/layout/AppLayout.tsx
 import React from "react";
-import Sidebar from "/src/components/layout/Sidebar";
-import Topbar from "/src/components/layout/Topbar";
+import Sidebar from "@/components/layout/Sidebar";
+import Topbar from "@/components/layout/Topbar";
 
 type Props = {
   children: React.ReactNode;

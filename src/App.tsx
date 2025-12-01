@@ -6,16 +6,16 @@ import {
   Navigate,
 } from "react-router-dom";
 
-import { useAuth } from "/src/lib/auth";
+import { useAuth } from "@/lib/auth";
 
-import AppLayout from "/src/components/layout/AppLayout";
-import Login from "/src/components/pages/Login";
-import Dashboard from "/src/components/pages/Dashboard";
-import Clients from "/src/components/pages/Clients";
-import AccountUsage from "/src/components/pages/AccountUsage";
-import Members from "/src/components/pages/Members";
-import Metrics from "/src/components/pages/Metrics";
-import Logs from "/src/components/pages/Logs";
+import AppLayout from "@/components/layout/AppLayout";
+import Login from "@/components/pages/Login";
+import Dashboard from "@/components/pages/Dashboard";
+import Clients from "@/components/pages/Clients";
+import AccountUsage from "@/components/pages/AccountUsage";
+import Members from "@/components/pages/Members";
+import Metrics from "@/components/pages/Metrics";
+import Logs from "@/components/pages/Logs";
 
 
 const PrivateRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
