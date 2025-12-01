@@ -13,7 +13,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx",          // <- JSX permitido (adiós TS17004)
+    "jsx": "react-jsx",
     "baseUrl": "./src",
     "paths": {
       "@/*": ["./*"]
