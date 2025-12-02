@@ -1,16 +1,6 @@
 // src/components/domains/DomainOnboardingModal.tsx
 import React, { useState } from "react";
 
-type Props = {
-  open: boolean;
-  forced?: boolean;
-  loading?: boolean;
-  errorMessage?: string | null;
-  onSubmitDomain: (hostname: string) => void | Promise<void>;
-  onClose?: () => void;
-};
-
-
 type Domain = {
   id: string;
   hostname: string;
@@ -18,9 +8,17 @@ type Domain = {
   verification_token: string;
 };
 
+type DomainOnboardingModalProps = {
+  open: boolean;
+  maxDomains: number;
+  currentDomains: Domain[];
+  onDomainCreated: (domain: Domain) => void;
+  onClose?: () => void;
+};
+
 const API_BASE = import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
 
-export const DomainOnboardingModal: React.FC<Props> = ({
+export const DomainOnboardingModal: React.FC<DomainOnboardingModalProps> = ({
   open,
   maxDomains,
   currentDomains,
@@ -37,7 +35,8 @@ export const DomainOnboardingModal: React.FC<Props> = ({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!hostname.trim() || loading) return;
+    if (!hostname.trim() || loading || remaining <= 0) return;
+
     setLoading(true);
     setError(null);
 
@@ -54,8 +53,9 @@ export const DomainOnboardingModal: React.FC<Props> = ({
       if (!res.ok || !data.success) {
         setError(data.error || "No se ha podido crear el dominio");
       } else {
-        onDomainCreated(data.domain); // 👉 notificamos al padre
-        // el padre ya se encarga de cerrar si toca
+        onDomainCreated(data.domain);
+        // el padre decide si cierra o no
+        setHostname("");
       }
     } catch (err: any) {
       setError(err.message || "Error de red");
@@ -65,10 +65,7 @@ export const DomainOnboardingModal: React.FC<Props> = ({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-      // no onClick en el backdrop, para que no se pueda cerrar pulsando fuera
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
       <div className="w-full max-w-lg rounded-2xl bg-slate-950 border border-slate-800 p-8 shadow-xl">
         <h2 className="text-xl font-semibold text-slate-50 mb-2">
           Añade tu dominio principal
@@ -93,11 +90,7 @@ export const DomainOnboardingModal: React.FC<Props> = ({
             />
           </div>
 
-          {error && (
-            <p className="text-xs text-red-400">
-              {error}
-            </p>
-          )}
+          {error && <p className="text-xs text-red-400">{error}</p>}
 
           <button
             type="submit"
@@ -107,10 +100,20 @@ export const DomainOnboardingModal: React.FC<Props> = ({
             {loading ? "Guardando..." : "Continuar"}
           </button>
 
-          {/* Importante: NO mostramos botón de cancelar ni icono de cerrar */}
           <p className="mt-3 text-[11px] text-slate-500 text-center">
             Te quedan {remaining} dominio(s) disponibles en tu plan.
           </p>
+
+          {/* opcional: si ya hay dominios, podrías dejar un botón pequeño de cerrar */}
+          {currentDomains.length > 0 && onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="mt-3 w-full text-[11px] text-slate-500 hover:text-slate-300"
+            >
+              Cerrar
+            </button>
+          )}
         </form>
       </div>
     </div>
