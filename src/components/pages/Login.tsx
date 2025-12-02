@@ -2,18 +2,74 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { useTranslation } from "react-i18next";
-import LanguageSwitch from "@/components/LanguageSwitch"; // pequeño toggle ES/EN
+
+type Lang = "es" | "en";
+
+const COPY: Record<Lang, {
+  title: string;
+  subtitle: React.ReactNode;
+  emailLabel: string;
+  emailPlaceholder: string;
+  passwordLabel: string;
+  passwordPlaceholder: string;
+  button: string;
+  buttonLoading: string;
+  errorEmpty: string;
+  errorGeneric: string;
+  footerLeft: string;
+  footerRight: string;
+}> = {
+  es: {
+    title: "Inicia sesión",
+    subtitle: (
+      <>
+        Controla tu <span className="text-cyan-300">WAF gestionado</span>, bloquea
+        bots y revisa métricas de seguridad en tiempo real.
+      </>
+    ),
+    emailLabel: "Email",
+    emailPlaceholder: "tucorreo@empresa.com",
+    passwordLabel: "Password",
+    passwordPlaceholder: "••••••••",
+    button: "Entrar",
+    buttonLoading: "Entrando…",
+    errorEmpty: "Introduce email y contraseña.",
+    errorGeneric: "Credenciales inválidas o error de servidor",
+    footerLeft: "Control Center · v1.0",
+    footerRight: "TLS · WAF · Bots · Logs",
+  },
+  en: {
+    title: "Sign in",
+    subtitle: (
+      <>
+        Manage your <span className="text-cyan-300">managed WAF</span>, stop bots
+        and review security metrics in real time.
+      </>
+    ),
+    emailLabel: "Email",
+    emailPlaceholder: "you@company.com",
+    passwordLabel: "Password",
+    passwordPlaceholder: "••••••••",
+    button: "Sign in",
+    buttonLoading: "Signing in…",
+    errorEmpty: "Please enter email and password.",
+    errorGeneric: "Invalid credentials or server error",
+    footerLeft: "Control Center · v1.0",
+    footerRight: "TLS · WAF · Bots · Logs",
+  },
+};
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState("");        // <- vacío
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lang, setLang] = useState<Lang>("es");
 
   const { login } = useAuth();
   const navigate = useNavigate();
-  const { t } = useTranslation(["auth", "common"]);
+
+  const t = COPY[lang];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +78,7 @@ const Login: React.FC = () => {
     const sanitizedPassword = password.trim();
 
     if (!sanitizedEmail || !sanitizedPassword) {
-      setError(t("auth:errorRequired"));
+      setError(t.errorEmpty);
       return;
     }
 
@@ -30,12 +86,11 @@ const Login: React.FC = () => {
     setError(null);
 
     try {
-      setLoading(true);
       await login(sanitizedEmail, sanitizedPassword);
       navigate("/dashboard");
     } catch (err) {
       console.error(err);
-      setError(t("auth:errorGeneric"));
+      setError(t.errorGeneric);
     } finally {
       setLoading(false);
     }
@@ -49,35 +104,50 @@ const Login: React.FC = () => {
       </div>
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
-        <div className="w-full max-w-md rounded-3xl border border-slate-800/80 bg-slate-900/80 shadow-[0_18px_60px_rgba(0,0,0,0.7)] backdrop-blur-xl px-8 py-9">
-          {/* Barra superior: marca + selector idioma */}
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <div className="text-[11px] font-semibold tracking-[0.32em] text-slate-400">
-                {t("common:brand")}
-              </div>
-            </div>
-            <LanguageSwitch />
+        <div className="w-full max-w-md rounded-3xl border border-slate-800/80 bg-slate-900/80 shadow-[0_18px_60px_rgba(0,0,0,0.7)] backdrop-blur-xl px-8 py-9 relative">
+          {/* Switch de idioma */}
+          <div className="absolute right-6 top-6 flex items-center gap-1.5 text-[11px]">
+            <button
+              type="button"
+              onClick={() => setLang("es")}
+              className={`px-2 py-0.5 rounded-full border text-[11px] transition ${
+                lang === "es"
+                  ? "bg-cyan-400 text-slate-950 border-cyan-400"
+                  : "bg-transparent text-slate-400 border-slate-600 hover:border-cyan-400/70 hover:text-cyan-300"
+              }`}
+            >
+              ES
+            </button>
+            <button
+              type="button"
+              onClick={() => setLang("en")}
+              className={`px-2 py-0.5 rounded-full border text-[11px] transition ${
+                lang === "en"
+                  ? "bg-cyan-400 text-slate-950 border-cyan-400"
+                  : "bg-transparent text-slate-400 border-slate-600 hover:border-cyan-400/70 hover:text-cyan-300"
+              }`}
+            >
+              EN
+            </button>
           </div>
 
-          {/* Títulos */}
+          {/* Marca */}
           <div className="mb-6">
-            <h1 className="mt-1 text-2xl font-semibold text-slate-50">
-              {t("auth:title")}
+            <div className="text-[11px] font-semibold tracking-[0.32em] text-slate-400">
+              ZNTINEL
+            </div>
+            <h1 className="mt-3 text-2xl font-semibold text-slate-50">
+              {t.title}
             </h1>
             <p className="mt-2 text-xs leading-relaxed text-slate-400">
-              {t("auth:subtitle_part1")}{" "}
-              <span className="text-cyan-300">
-                {t("auth:subtitle_highlight")}
-              </span>
-              {t("auth:subtitle_part2")}
+              {t.subtitle}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-400">
-                {t("auth:emailLabel")}
+                {t.emailLabel}
               </label>
               <input
                 type="email"
@@ -85,13 +155,13 @@ const Login: React.FC = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
-                placeholder={t("auth:emailPlaceholder")}
+                placeholder={t.emailPlaceholder}
               />
             </div>
 
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-400">
-                {t("auth:passwordLabel")}
+                {t.passwordLabel}
               </label>
               <input
                 type="password"
@@ -99,7 +169,7 @@ const Login: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
-                placeholder={t("auth:passwordPlaceholder")}
+                placeholder={t.passwordPlaceholder}
               />
             </div>
 
@@ -114,14 +184,14 @@ const Login: React.FC = () => {
               disabled={loading}
               className="mt-2 w-full rounded-xl bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? t("auth:submitLoading") : t("auth:submit")}
+              {loading ? t.buttonLoading : t.button}
             </button>
           </form>
 
           {/* mini texto de confianza */}
           <div className="mt-4 flex items-center justify-between text-[10px] text-slate-500">
-            <span>{t("common:footerVersion")}</span>
-            <span className="text-slate-500">{t("common:footerLinks")}</span>
+            <span>{t.footerLeft}</span>
+            <span className="text-slate-500">{t.footerRight}</span>
           </div>
         </div>
       </div>
