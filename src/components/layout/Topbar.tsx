@@ -3,6 +3,7 @@ import React from "react";
 import { useAuth } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
 
+
 const Topbar: React.FC = () => {
   const { user, account, logout } = useAuth();
   const navigate = useNavigate();

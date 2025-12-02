@@ -2,6 +2,8 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+import { useTranslation } from "react-i18next";
+import LanguageSwitch from "@/components/LanguageSwitch"; // pequeño toggle ES/EN
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");        // <- vacío
@@ -11,6 +13,7 @@ const Login: React.FC = () => {
 
   const { login } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation(["auth", "common"]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,7 +22,7 @@ const Login: React.FC = () => {
     const sanitizedPassword = password.trim();
 
     if (!sanitizedEmail || !sanitizedPassword) {
-      setError("Introduce email y contraseña.");
+      setError(t("auth:errorRequired"));
       return;
     }
 
@@ -32,7 +35,7 @@ const Login: React.FC = () => {
       navigate("/dashboard");
     } catch (err) {
       console.error(err);
-      setError("Credenciales inválidas o error de servidor");
+      setError(t("auth:errorGeneric"));
     } finally {
       setLoading(false);
     }
@@ -47,24 +50,34 @@ const Login: React.FC = () => {
 
       <div className="relative z-10 flex min-h-screen items-center justify-center px-4">
         <div className="w-full max-w-md rounded-3xl border border-slate-800/80 bg-slate-900/80 shadow-[0_18px_60px_rgba(0,0,0,0.7)] backdrop-blur-xl px-8 py-9">
-          {/* Marca */}
-          <div className="mb-6">
-            <div className="text-[11px] font-semibold tracking-[0.32em] text-slate-400">
-              ZNTINEL
+          {/* Barra superior: marca + selector idioma */}
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <div className="text-[11px] font-semibold tracking-[0.32em] text-slate-400">
+                {t("common:brand")}
+              </div>
             </div>
-            <h1 className="mt-3 text-2xl font-semibold text-slate-50">
-              Inicia sesión
+            <LanguageSwitch />
+          </div>
+
+          {/* Títulos */}
+          <div className="mb-6">
+            <h1 className="mt-1 text-2xl font-semibold text-slate-50">
+              {t("auth:title")}
             </h1>
             <p className="mt-2 text-xs leading-relaxed text-slate-400">
-              Controla tu <span className="text-cyan-300">WAF gestionado</span>,
-              bloquea bots y revisa métricas de seguridad en tiempo real.
+              {t("auth:subtitle_part1")}{" "}
+              <span className="text-cyan-300">
+                {t("auth:subtitle_highlight")}
+              </span>
+              {t("auth:subtitle_part2")}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-400">
-                Email
+                {t("auth:emailLabel")}
               </label>
               <input
                 type="email"
@@ -72,13 +85,13 @@ const Login: React.FC = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
-                placeholder="tucorreo@empresa.com"
+                placeholder={t("auth:emailPlaceholder")}
               />
             </div>
 
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-400">
-                Password
+                {t("auth:passwordLabel")}
               </label>
               <input
                 type="password"
@@ -86,7 +99,7 @@ const Login: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
-                placeholder="••••••••"
+                placeholder={t("auth:passwordPlaceholder")}
               />
             </div>
 
@@ -101,16 +114,14 @@ const Login: React.FC = () => {
               disabled={loading}
               className="mt-2 w-full rounded-xl bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? "Entrando…" : "Entrar"}
+              {loading ? t("auth:submitLoading") : t("auth:submit")}
             </button>
           </form>
 
           {/* mini texto de confianza */}
           <div className="mt-4 flex items-center justify-between text-[10px] text-slate-500">
-            <span>Control Center · v1.0</span>
-            <span className="text-slate-500">
-              TLS · WAF · Bots · Logs
-            </span>
+            <span>{t("common:footerVersion")}</span>
+            <span className="text-slate-500">{t("common:footerLinks")}</span>
           </div>
         </div>
       </div>
