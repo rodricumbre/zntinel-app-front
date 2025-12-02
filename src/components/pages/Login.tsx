@@ -2,74 +2,54 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
+// src/components/pages/Login.tsx
+import { useLanguage } from "@/lib/language";
 
 type Lang = "es" | "en";
 
-const COPY: Record<Lang, {
-  title: string;
-  subtitle: React.ReactNode;
-  emailLabel: string;
-  emailPlaceholder: string;
-  passwordLabel: string;
-  passwordPlaceholder: string;
-  button: string;
-  buttonLoading: string;
-  errorEmpty: string;
-  errorGeneric: string;
-  footerLeft: string;
-  footerRight: string;
-}> = {
+const copy = {
   es: {
     title: "Inicia sesión",
-    subtitle: (
-      <>
-        Controla tu <span className="text-cyan-300">WAF gestionado</span>, bloquea
-        bots y revisa métricas de seguridad en tiempo real.
-      </>
-    ),
+    subtitle:
+      "Controla tu WAF gestionado, bloquea bots y revisa métricas de seguridad en tiempo real.",
     emailLabel: "Email",
-    emailPlaceholder: "tucorreo@empresa.com",
     passwordLabel: "Password",
+    emailPlaceholder: "tucorreo@empresa.com",
     passwordPlaceholder: "••••••••",
     button: "Entrar",
-    buttonLoading: "Entrando…",
     errorEmpty: "Introduce email y contraseña.",
     errorGeneric: "Credenciales inválidas o error de servidor",
     footerLeft: "Control Center · v1.0",
     footerRight: "TLS · WAF · Bots · Logs",
   },
   en: {
-    title: "Sign in",
-    subtitle: (
-      <>
-        Manage your <span className="text-cyan-300">managed WAF</span>, stop bots
-        and review security metrics in real time.
-      </>
-    ),
+    title: "Log in",
+    subtitle:
+      "Control your managed WAF, block bots and review security metrics in real time.",
     emailLabel: "Email",
-    emailPlaceholder: "you@company.com",
     passwordLabel: "Password",
+    emailPlaceholder: "you@company.com",
     passwordPlaceholder: "••••••••",
-    button: "Sign in",
-    buttonLoading: "Signing in…",
-    errorEmpty: "Please enter email and password.",
+    button: "Log in",
+    errorEmpty: "Enter email and password.",
     errorGeneric: "Invalid credentials or server error",
     footerLeft: "Control Center · v1.0",
     footerRight: "TLS · WAF · Bots · Logs",
   },
-};
+} as const;
+
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lang, setLang] = useState<Lang>("es");
+  const { lang, toggleLang } = useLanguage();
+  const t = copy[lang];
+
 
   const { login } = useAuth();
   const navigate = useNavigate();
-
-  const t = COPY[lang];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

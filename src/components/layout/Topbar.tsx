@@ -2,11 +2,13 @@
 import React from "react";
 import { useAuth } from "@/lib/auth";
 import { useNavigate } from "react-router-dom";
+import { useLanguage } from "@/lib/language";
 
 
 const Topbar: React.FC = () => {
   const { user, account, logout } = useAuth();
   const navigate = useNavigate();
+  const {lang, toggleLang } = useLanguage();
 
   const handleLogout = async () => {
     await logout();
@@ -37,6 +39,19 @@ const Topbar: React.FC = () => {
           <div className="text-[11px] text-slate-400">
             {user?.email ?? "admin@zntinel.com"}
           </div>
+          <button
+          type="button"
+          onClick={toggleLang}
+          className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[11px] font-medium text-slate-200 hover:border-cyan-400 hover:text-cyan-300 transition"
+        >
+          <span className="uppercase">
+            {lang === "es" ? "ES" : "EN"}
+          </span>
+          <span className="h-3 w-px bg-slate-600" />
+          <span className="uppercase">
+            {lang === "es" ? "EN" : "ES"}
+          </span>
+        </button>
         </div>
         <button
           type="button"
