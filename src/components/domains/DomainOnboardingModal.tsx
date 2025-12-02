@@ -7,12 +7,22 @@ type Props = {
   onSubmitDomain: (hostname: string) => void;
 };
 
-export const DomainOnboardingModal: React.FC<Props> = ({
+type Props = {
+  open: boolean;
+  forced?: boolean; // si true, sin botón de cerrar / más tarde
+  loading?: boolean;
+  errorMessage?: string | null;
+  onSubmitDomain: (hostname: string) => void | Promise<void>;
+};
+
+export function DomainOnboardingModal({
   open,
-  onClose,
+  forced = false,
+  loading = false,
+  errorMessage,
   onSubmitDomain,
-}) => {
-  const [hostname, setHostname] = React.useState("");
+}: Props) {
+  const [hostname, setHostname] = useState("");
 
   if (!open) return null;
 
@@ -23,46 +33,54 @@ export const DomainOnboardingModal: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70">
-      <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-700/80 p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur">
+      <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-700 p-6 shadow-xl">
         <h2 className="text-lg font-semibold text-slate-50 mb-2">
-          Conecta tu dominio
+          Añade tu dominio principal
         </h2>
-        <p className="text-sm text-slate-400 mb-4">
-          Antes de poder analizar tráfico y ataques, necesitamos saber qué
-          dominio quieres proteger con Zntinel.
+        <p className="text-xs text-slate-400 mb-4">
+          Para empezar a proteger y analizar tu sitio, dinos cuál es tu dominio
+          principal (ej. <span className="font-mono">midominio.com</span>).
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1">
+            <label className="block text-xs font-medium text-slate-300 mb-1">
               Dominio
             </label>
             <input
-              className="w-full rounded-lg bg-slate-900/80 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/70"
-              placeholder="midominio.com"
+              type="text"
               value={hostname}
               onChange={(e) => setHostname(e.target.value)}
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+              placeholder="midominio.com"
+              autoFocus
             />
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
+          {errorMessage && (
+            <p className="text-[11px] text-red-400">{errorMessage}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-lg bg-cyan-500 px-3 py-2 text-sm font-medium text-slate-950 hover:bg-cyan-400 disabled:opacity-60"
+          >
+            {loading ? "Guardando…" : "Continuar"}
+          </button>
+
+          {/* IMPORTANTE: si forced = true, NO ponemos botón de cerrar / más tarde */}
+          {!forced && (
             <button
               type="button"
-              onClick={onClose}
-              className="text-xs px-3 py-2 rounded-md border border-slate-700 text-slate-300 hover:bg-slate-800/80"
+              className="w-full text-xs text-slate-400 mt-1"
             >
-              Más tarde
+              Ahora no
             </button>
-            <button
-              type="submit"
-              className="text-xs px-4 py-2 rounded-md bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold"
-            >
-              Añadir dominio
-            </button>
-          </div>
+          )}
         </form>
       </div>
     </div>
   );
-};
+}

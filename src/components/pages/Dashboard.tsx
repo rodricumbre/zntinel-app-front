@@ -177,6 +177,7 @@ export function DashboardDomainsWidget() {
   const [domains, setDomains] = useState<Domain[] | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const API_BASE =
     import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
@@ -189,25 +190,27 @@ export function DashboardDomainsWidget() {
       .then((r) => r.json())
       .then((data) => {
         if (data.success) {
-          const list = data.domains || [];
+          const list: Domain[] = data.domains || [];
           setDomains(list);
+          // Si no hay dominios, mostramos el modal sí o sí
           if (list.length === 0) {
-            // no hay dominios => abrimos modal
             setShowModal(true);
           }
         } else {
           console.error("Error loading domains", data);
-          // si falla, también puedes abrir modal si quieres
+          setDomains([]);
           setShowModal(true);
         }
       })
       .catch((err) => {
         console.error("Error loading domains", err);
+        setDomains([]);
         setShowModal(true);
       });
   }, []);
 
   const handleSubmitDomain = async (hostname: string) => {
+    setErrorMsg(null);
     try {
       setLoading(true);
       const res = await fetch(`${API_BASE}/domains`, {
@@ -218,81 +221,125 @@ export function DashboardDomainsWidget() {
       });
 
       const data = await res.json();
+
       if (!res.ok || !data.success) {
-        console.error("Error creando dominio", data);
-        alert("Error creando dominio: " + (data.error || "desconocido"));
+        if (data.error === "DOMAIN_LIMIT_REACHED") {
+          const max = data.maxAllowed ?? "?";
+          setErrorMsg(
+            `Has alcanzado el máximo de dominios para tu plan (${max}).`
+          );
+        } else {
+          setErrorMsg(
+            `No se ha podido añadir el dominio: ${data.error || "error desconocido"}`
+          );
+        }
         return;
       }
 
-      setDomains([data.domain]);
+      // Añadimos el dominio a la lista (puede haber varios)
+      setDomains((prev) => {
+        const current = prev || [];
+        // si ya existía, lo reemplazamos
+        const filtered = current.filter(
+          (d) => d.id !== data.domain.id
+        );
+        return [...filtered, data.domain];
+      });
+
+      // ¡Ojo!: NO cerramos el modal si aún no tiene dominios (no debería pasar ya)
+      // pero si antes no tenía ninguno, ahora sí → ya podemos ocultar
       setShowModal(false);
     } catch (e) {
       console.error(e);
-      alert("Error de red creando dominio");
+      setErrorMsg("Error de red creando dominio.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Mientras carga, no mostramos nada (o un skeleton si quieres)
+  // Mientras carga, mostramos un fondo vacío
   if (domains === null) {
-    return null;
+    return (
+      <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 text-sm text-slate-300">
+        Cargando dominios…
+      </div>
+    );
   }
 
-  const domain = domains[0]; // de momento 1 por cuenta
+  // Banner de estado (usamos el primero como “principal”)
+  const primary = domains[0] as Domain | undefined;
 
   return (
     <>
-      {/* Banner de estado de dominio */}
-      {domains.length === 0 ? (
-        <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-4 text-sm text-slate-200">
-          Todavía no has configurado ningún dominio.
-        </div>
-      ) : domain.dns_status === "pending" ? (
-        <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/5 p-4 text-sm">
-          <div className="font-medium mb-1">
-            Verificación de dominio pendiente
+      <div className="space-y-4">
+        {primary ? (
+          primary.dns_status === "pending" ? (
+            <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/5 p-4 text-sm">
+              <div className="font-medium mb-1">
+                Verificación de dominio pendiente
+              </div>
+              <p className="mb-2">
+                Añade este registro TXT en tu DNS para verificar{" "}
+                <span className="font-mono">{primary.hostname}</span>:
+              </p>
+              <code className="block text-xs bg-slate-950/80 border border-slate-800 rounded-lg p-2 mt-1">
+                Nombre: _zntinel.{primary.hostname}
+                <br />
+                Valor: {primary.verification_token}
+              </code>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4 text-sm">
+              <div className="font-medium mb-1">Dominio verificado</div>
+              <p className="text-emerald-300 text-xs">
+                {primary.hostname} está verificado. Ya podemos empezar a
+                analizar tráfico y ataques.
+              </p>
+            </div>
+          )
+        ) : (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 text-sm text-slate-200">
+            Todavía no has configurado ningún dominio.
           </div>
-          <p className="mb-2">
-            Añade este registro TXT en tu DNS para verificar{" "}
-            <span className="font-mono">{domain.hostname}</span>:
-          </p>
-          <code className="block text-xs bg-slate-950/80 border border-slate-800 rounded-lg p-2 mt-1">
-            Nombre: _zntinel.{domain.hostname}
-            <br />
-            Valor: {domain.verification_token}
-          </code>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4 text-sm">
-          <div className="font-medium mb-1">Dominio verificado</div>
-          <p className="text-emerald-300 text-xs">
-            {domain.hostname} está verificado. Ya podemos empezar a analizar
-            tráfico y ataques.
-          </p>
-        </div>
-      )}
+        )}
 
-      {/* Modal de onboarding */}
+        {domains.length > 1 && (
+          <div className="rounded-xl border border-slate-800 bg-slate-950/80 p-4 text-xs text-slate-300">
+            <div className="font-medium mb-2">
+              Dominios configurados ({domains.length})
+            </div>
+            <ul className="space-y-1">
+              {domains.map((d) => (
+                <li key={d.id} className="flex items-center justify-between">
+                  <span className="font-mono text-[11px]">{d.hostname}</span>
+                  <span
+                    className={`text-[10px] rounded-full px-2 py-0.5 border ${
+                      d.dns_status === "ok"
+                        ? "border-emerald-500/40 text-emerald-300"
+                        : "border-yellow-500/40 text-yellow-300"
+                    }`}
+                  >
+                    {d.dns_status === "ok" ? "Verificado" : "Pendiente DNS"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* Modal de onboarding – sin botón de “más tarde” */}
       <DomainOnboardingModal
         open={showModal}
-        onClose={() => setShowModal(false)}
+        forced={true}        // nueva prop para quitar botones de cierre
+        loading={loading}
+        errorMessage={errorMsg}
         onSubmitDomain={handleSubmitDomain}
       />
     </>
   );
-
-
-
-  return (
-    <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4 text-sm">
-      <div className="font-medium mb-1">Dominio verificado</div>
-      <p className="text-emerald-300 text-xs">
-        {domain.hostname} está verificado. Ya podemos empezar a analizar tráfico y ataques.
-      </p>
-    </div>
-  );
 }
+
 
 const Dashboard: React.FC = () => {
   const { lang } = useLanguage();
