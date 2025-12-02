@@ -1,7 +1,7 @@
 // src/components/pages/Login.tsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "/src/lib/auth";
+import { useAuth } from "@/lib/auth";
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState("");        // <- vacío
@@ -27,6 +27,7 @@ const Login: React.FC = () => {
     setError(null);
 
     try {
+      setLoading(true);
       await login(sanitizedEmail, sanitizedPassword);
       navigate("/dashboard");
     } catch (err) {
