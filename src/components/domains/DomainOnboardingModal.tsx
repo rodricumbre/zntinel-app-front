@@ -1,18 +1,13 @@
 // src/components/domains/DomainOnboardingModal.tsx
-import React from "react";
+import React, { useState } from "react";
 
 type Props = {
   open: boolean;
-  onClose: () => void;
-  onSubmitDomain: (hostname: string) => void;
-};
-
-type Props = {
-  open: boolean;
-  forced?: boolean; // si true, sin botón de cerrar / más tarde
+  forced?: boolean;
   loading?: boolean;
   errorMessage?: string | null;
   onSubmitDomain: (hostname: string) => void | Promise<void>;
+  onClose?: () => void;
 };
 
 export function DomainOnboardingModal({
@@ -21,6 +16,7 @@ export function DomainOnboardingModal({
   loading = false,
   errorMessage,
   onSubmitDomain,
+  onClose,
 }: Props) {
   const [hostname, setHostname] = useState("");
 
@@ -32,15 +28,27 @@ export function DomainOnboardingModal({
     onSubmitDomain(hostname.trim());
   };
 
+  const canClose = !forced && !!onClose;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur">
-      <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-700 p-6 shadow-xl">
+      <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-700 p-6 shadow-xl relative">
+        {canClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 text-xs"
+          >
+            ×
+          </button>
+        )}
+
         <h2 className="text-lg font-semibold text-slate-50 mb-2">
           Añade tu dominio principal
         </h2>
         <p className="text-xs text-slate-400 mb-4">
-          Para empezar a proteger y analizar tu sitio, dinos cuál es tu dominio
-          principal (ej. <span className="font-mono">midominio.com</span>).
+          Antes de usar el panel, dinos cuál es tu dominio principal
+          (ej. <span className="font-mono">midominio.com</span>).
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -70,13 +78,13 @@ export function DomainOnboardingModal({
             {loading ? "Guardando…" : "Continuar"}
           </button>
 
-          {/* IMPORTANTE: si forced = true, NO ponemos botón de cerrar / más tarde */}
-          {!forced && (
+          {canClose && (
             <button
               type="button"
+              onClick={onClose}
               className="w-full text-xs text-slate-400 mt-1"
             >
-              Ahora no
+              Cancelar
             </button>
           )}
         </form>
