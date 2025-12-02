@@ -1,8 +1,20 @@
 // src/components/pages/Dashboard.tsx
 import React from "react";
 import { useLanguage } from "@/lib/language";
+import { DomainOnboardingModal } from "@/components/domains/DomainOnboardingModal";
+
+
+import { useEffect, useState } from "react";
 
 type Lang = "es" | "en";
+
+
+type Domain = {
+  id: string;
+  hostname: string;
+  dns_status: "pending" | "ok";
+  verification_token: string;
+};
 
 const copy: Record<
   Lang,
@@ -161,6 +173,127 @@ const fakeActivity = [
   },
 ];
 
+export function DashboardDomainsWidget() {
+  const [domains, setDomains] = useState<Domain[] | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const API_BASE =
+    import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
+
+  // Carga inicial de dominios
+  useEffect(() => {
+    fetch(`${API_BASE}/domains`, {
+      credentials: "include",
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          const list = data.domains || [];
+          setDomains(list);
+          if (list.length === 0) {
+            // no hay dominios => abrimos modal
+            setShowModal(true);
+          }
+        } else {
+          console.error("Error loading domains", data);
+          // si falla, también puedes abrir modal si quieres
+          setShowModal(true);
+        }
+      })
+      .catch((err) => {
+        console.error("Error loading domains", err);
+        setShowModal(true);
+      });
+  }, []);
+
+  const handleSubmitDomain = async (hostname: string) => {
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/domains`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostname }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        console.error("Error creando dominio", data);
+        alert("Error creando dominio: " + (data.error || "desconocido"));
+        return;
+      }
+
+      setDomains([data.domain]);
+      setShowModal(false);
+    } catch (e) {
+      console.error(e);
+      alert("Error de red creando dominio");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mientras carga, no mostramos nada (o un skeleton si quieres)
+  if (domains === null) {
+    return null;
+  }
+
+  const domain = domains[0]; // de momento 1 por cuenta
+
+  return (
+    <>
+      {/* Banner de estado de dominio */}
+      {domains.length === 0 ? (
+        <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-4 text-sm text-slate-200">
+          Todavía no has configurado ningún dominio.
+        </div>
+      ) : domain.dns_status === "pending" ? (
+        <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/5 p-4 text-sm">
+          <div className="font-medium mb-1">
+            Verificación de dominio pendiente
+          </div>
+          <p className="mb-2">
+            Añade este registro TXT en tu DNS para verificar{" "}
+            <span className="font-mono">{domain.hostname}</span>:
+          </p>
+          <code className="block text-xs bg-slate-950/80 border border-slate-800 rounded-lg p-2 mt-1">
+            Nombre: _zntinel.{domain.hostname}
+            <br />
+            Valor: {domain.verification_token}
+          </code>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4 text-sm">
+          <div className="font-medium mb-1">Dominio verificado</div>
+          <p className="text-emerald-300 text-xs">
+            {domain.hostname} está verificado. Ya podemos empezar a analizar
+            tráfico y ataques.
+          </p>
+        </div>
+      )}
+
+      {/* Modal de onboarding */}
+      <DomainOnboardingModal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        onSubmitDomain={handleSubmitDomain}
+      />
+    </>
+  );
+
+
+
+  return (
+    <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4 text-sm">
+      <div className="font-medium mb-1">Dominio verificado</div>
+      <p className="text-emerald-300 text-xs">
+        {domain.hostname} está verificado. Ya podemos empezar a analizar tráfico y ataques.
+      </p>
+    </div>
+  );
+}
+
 const Dashboard: React.FC = () => {
   const { lang } = useLanguage();
   const t = copy[lang as Lang];
@@ -175,6 +308,9 @@ const Dashboard: React.FC = () => {
           </h1>
           <p className="mt-2 text-sm text-slate-400 max-w-2xl">{t.subtitle}</p>
         </div>
+
+        {/* Estado de dominios / onboarding */}
+        <DashboardDomainsWidget />
 
         {/* Fila de KPIs principales */}
         <div className="grid gap-5 md:grid-cols-4">
