@@ -12,12 +12,12 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.1.17",
     "axios": "^1.13.2",
+    "i18next": "^23.16.8",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-i18next": "^15.7.4",
     "react-router-dom": "^6.30.2",
-    "router-dom": "^3.0.3",
-    "i18next": "^23.13.0",
-  "react-i18next": "^15.5.1"
+    "router-dom": "^3.0.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
