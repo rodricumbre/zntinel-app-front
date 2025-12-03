@@ -132,9 +132,7 @@ const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
   return (
     <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-[11px] text-slate-400">
-          Uptime últimas 24 h
-        </p>
+        <p className="text-[11px] text-slate-400">Uptime últimas 24 h</p>
         <p className="text-[10px] text-slate-500">
           Cada punto representa 1 hora
         </p>
@@ -219,7 +217,7 @@ const Dashboard: React.FC = () => {
     }
   }, [domains, selectedDomainId]);
 
-  // carga de métricas cuando cambia dominio
+  // carga de métricas al cambiar dominio
   useEffect(() => {
     if (!selectedDomainId) {
       setMetrics(null);
@@ -264,48 +262,46 @@ const Dashboard: React.FC = () => {
       });
   }, [selectedDomainId, domains]);
 
-  // botón Actualizar -> check ahora + recargar métricas
+  
   const handleRefreshMetrics = async () => {
-    if (!selectedDomainId) return;
+  if (!selectedDomainId) return;
 
-    setMetricsLoading(true);
-    setMetricsError(null);
+  setMetricsLoading(true);
+  setMetricsError(null);
 
-    try {
-      // 1) fuerza un nuevo health check ahora
-      await fetch(
-        `${API_BASE}/domains/${encodeURIComponent(
-          selectedDomainId
-        )}/health-check-now`,
-        {
-          method: "POST",
-          credentials: "include",
-        }
-      );
-
-      // 2) recarga overview (con cache buster)
-      const res = await fetch(getMetricsUrl(selectedDomainId), {
+  try {
+    const res = await fetch(
+      `${API_BASE}/domains/${encodeURIComponent(
+        selectedDomainId
+      )}/health-check-now`,
+      {
+        method: "POST",
         credentials: "include",
-      });
-      const data = await res.json();
-
-      if (!data.success) {
-        setMetrics(null);
-        setMetricsError(
-          data.error || "No se han podido cargar las métricas"
-        );
-        return;
+        headers: { "Content-Type": "application/json" },
       }
+    );
 
-      setMetrics(mapApiMetrics(data));
-    } catch (err: any) {
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      setMetrics(null);
       setMetricsError(
-        err?.message || "Error de red al actualizar métricas"
+        data.error || "No se han podido cargar las métricas"
       );
-    } finally {
-      setMetricsLoading(false);
+      return;
     }
-  };
+
+    // health-check-now devuelve el mismo formato que metrics/overview
+    setMetrics(mapApiMetrics(data));
+  } catch (err: any) {
+    setMetricsError(
+      err?.message || "Error de red al actualizar métricas"
+    );
+  } finally {
+    setMetricsLoading(false);
+  }
+};
+
 
   async function handleVerify(domain: Domain) {
     if (verifyingId) return;
