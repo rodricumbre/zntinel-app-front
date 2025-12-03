@@ -19,7 +19,14 @@ type DomainMetrics = {
   lastCheckedAt: string | null;
   avgTtfbMs: number | null;
   p95TtfbMs: number | null;
+  okChecks: number;
+  errorChecks: number;
+  timeoutErrors: number;
+  networkErrors: number;
+  http4xxErrors: number;
+  http5xxErrors: number;
 };
+
 
 const API_BASE =
   import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
@@ -29,6 +36,23 @@ function getMaxDomainsForPlan(plan: string | null | undefined) {
   if (plan === "premium") return 5;
   return 1;
 }
+
+
+function formatDateTime(iso: string): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString("es-ES", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 
 const Dashboard: React.FC = () => {
   const { account } = useAuth();
@@ -55,30 +79,60 @@ const Dashboard: React.FC = () => {
 
   // Carga inicial de dominios
   useEffect(() => {
-    fetch(`${API_BASE}/domains`, { credentials: "include" })
+        fetch(
+      `${API_BASE}/domains/${encodeURIComponent(
+        selectedDomainId
+      )}/metrics/overview`,
+      {
+        credentials: "include",
+      }
+    )
       .then((r) => r.json())
       .then((data) => {
-        if (data.success) {
-          const list: Domain[] = data.domains || [];
-          setDomains(list);
-
-          if (list.length === 0) {
-            setIsOnboardingOpen(true);
-          } else {
-            // seleccionamos el primero por defecto si no hay seleccionado
-            setSelectedDomainId((prev) => prev ?? list[0].id);
-          }
-        } else {
-          setError(data.error || "Error cargando dominios");
-          setDomains([]);
-          setIsOnboardingOpen(true);
+        if (!data.success) {
+          setMetrics(null);
+          setMetricsError(
+            data.error || "No se han podido cargar las métricas"
+          );
+          return;
         }
+
+        const totals = data.totals || {};
+        const totalChecks = Number(totals.totalRequests ?? 0);
+
+        setMetrics({
+          from: data.from,
+          to: data.to,
+          totalChecks,
+          uptimePercent:
+            typeof totals.uptimePercent === "number"
+              ? totals.uptimePercent
+              : totals.uptimePercent != null
+              ? Number(totals.uptimePercent)
+              : null,
+          lastStatusCode:
+            typeof totals.lastStatusCode === "number"
+              ? totals.lastStatusCode
+              : totals.lastStatusCode != null
+              ? Number(totals.lastStatusCode)
+              : null,
+          lastCheckedAt: totals.lastCheckedAt ?? null,
+          avgTtfbMs:
+            totals.avgTtfbMs != null
+              ? Math.round(Number(totals.avgTtfbMs))
+              : null,
+          p95TtfbMs:
+            totals.p95TtfbMs != null
+              ? Math.round(Number(totals.p95TtfbMs))
+              : null,
+          okChecks: Number(totals.allowedRequests ?? 0),
+          errorChecks: Number(totals.blockedRequests ?? 0),
+          timeoutErrors: Number(totals.timeoutErrors ?? 0),
+          networkErrors: Number(totals.networkErrors ?? 0),
+          http4xxErrors: Number(totals.http4xxErrors ?? 0),
+          http5xxErrors: Number(totals.http5xxErrors ?? 0),
+        });
       })
-      .catch((err) => {
-        setError(String(err));
-        setDomains([]);
-        setIsOnboardingOpen(true);
-      });
   }, []);
 
   // cuando cambian los dominios y no hay seleccionado, elegir uno
@@ -398,9 +452,17 @@ const Dashboard: React.FC = () => {
 
             {/* Sección de métricas del dominio seleccionado */}
             <div className="mt-8">
-              <h2 className="text-sm font-semibold text-slate-200 mb-3">
-                Overview del dominio seleccionado
-              </h2>
+  <div className="flex items-center justify-between mb-3">
+    <h2 className="text-sm font-semibold text-slate-200">
+      Overview del dominio seleccionado
+    </h2>
+    {metrics && metrics.lastCheckedAt && (
+      <p className="text-[11px] text-slate-500">
+        Última actualización: {formatDateTime(metrics.lastCheckedAt)}
+      </p>
+    )}
+  </div>
+
 
               {!selectedDomain ? (
                 <p className="text-xs text-slate-500">
@@ -483,6 +545,53 @@ const Dashboard: React.FC = () => {
                             Checks totales: {metrics.totalChecks}
                           </p>
                         </div>
+                                              {/* Métricas adicionales */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs">
+                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                          <p className="text-[11px] text-slate-400 mb-1">
+                            Checks totales (últimas 24 h)
+                          </p>
+                          <p className="text-lg font-semibold">
+                            {metrics.totalChecks ?? 0}
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Número de comprobaciones realizadas contra este dominio.
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                          <p className="text-[11px] text-slate-400 mb-1">
+                            Checks con error
+                          </p>
+                          <p className="text-lg font-semibold">
+                            {metrics.errorChecks ?? 0}
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Ratio de error:{" "}
+                            {metrics.totalChecks > 0
+                              ? `${(
+                                  (metrics.errorChecks / metrics.totalChecks) *
+                                  100
+                                ).toFixed(1)}%`
+                              : "—"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                          <p className="text-[11px] text-slate-400 mb-1">
+                            Tipos de incidencias detectadas
+                          </p>
+                          <p className="text-[10px] text-slate-400 leading-relaxed">
+                            Timeouts / red: {metrics.timeoutErrors} · HTTP 5xx:{" "}
+                            {metrics.http5xxErrors} · HTTP 4xx / WAF:{" "}
+                            {metrics.http4xxErrors}
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Te ayuda a ver si los problemas vienen de caídas,
+                            red o bloqueos de aplicación.
+                          </p>
+                        </div>
+                      </div>
                       </div>
                     </>
                   )}
