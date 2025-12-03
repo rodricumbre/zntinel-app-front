@@ -15,6 +15,26 @@ type HourlyPoint = {
   uptimePercent: number | null;
 };
 
+type RiskLevel = "low" | "medium" | "high" | "critical";
+
+type IssueSeverity = "critical" | "high" | "medium" | "low";
+
+type IssueSummary = {
+  id: string;
+  severity: IssueSeverity;
+  category:
+    | "tls"
+    | "headers"
+    | "cookies"
+    | "email"
+    | "admin"
+    | "files"
+    | "availability"
+    | "other";
+  title: string;
+  detectedAt: string;
+};
+
 type DomainMetrics = {
   from: string;
   to: string;
@@ -31,6 +51,22 @@ type DomainMetrics = {
   http4xxErrors: number;
   http5xxErrors: number;
   hourly: HourlyPoint[];
+
+  // --- NUEVO: capa de ciberseguridad / dominio ---
+  securityScore: number | null;
+  riskLevel: RiskLevel | null;
+  criticalIssues: number;
+  warningIssues: number;
+
+  spfStatus: "ok" | "missing" | "invalid" | "unknown";
+  dkimStatus: "ok" | "missing" | "invalid" | "unknown";
+  dmarcPolicy: "none" | "quarantine" | "reject" | "invalid" | "unknown";
+  dnssecStatus: "enabled" | "disabled" | "unknown";
+
+  certDaysToExpire: number | null;
+  hasExpiringCertSoon: boolean;
+
+  topIssues: IssueSummary[];
 };
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
@@ -70,10 +106,8 @@ function mapApiMetrics(data: any): DomainMetrics {
   const totalChecks = Number(totals.totalRequests ?? 0);
 
   const hourly: HourlyPoint[] = hourlyRaw.map((h) => {
-    const total =
-      Number(h.totalRequests ?? h.total_requests ?? 0) || 0;
-    const blocked =
-      Number(h.blockedRequests ?? h.blocked_requests ?? 0) || 0;
+    const total = Number(h.totalRequests ?? h.total_requests ?? 0) || 0;
+    const blocked = Number(h.blockedRequests ?? h.blocked_requests ?? 0) || 0;
 
     const uptimePercent =
       total > 0 ? ((total - blocked) / total) * 100 : null;
@@ -83,6 +117,20 @@ function mapApiMetrics(data: any): DomainMetrics {
       uptimePercent,
     };
   });
+
+  // NUEVO: intentar leer datos de seguridad/email si el backend ya los devuelve.
+  const security = data?.security || data?.overview?.security || {};
+  const emailSec =
+    data?.emailSecurity || data?.email || data?.domainSecurity || {};
+  const cert = data?.certificate || {};
+  const issues: IssueSummary[] = (data?.topIssues || []).map((i: any) => ({
+    id: String(i.id ?? i.code ?? Math.random().toString(36).slice(2)),
+    severity: (i.severity ||
+      "medium") as IssueSeverity,
+    category: (i.category || "other") as IssueSummary["category"],
+    title: String(i.title || i.message || "Issue detectado"),
+    detectedAt: String(i.detectedAt || i.detected_at || data.to),
+  }));
 
   return {
     from: data.from,
@@ -112,6 +160,42 @@ function mapApiMetrics(data: any): DomainMetrics {
     http4xxErrors: Number(totals.http4xxErrors ?? 0),
     http5xxErrors: Number(totals.http5xxErrors ?? 0),
     hourly,
+
+    // --- NUEVO: seguridad ---
+    securityScore:
+      security.score != null ? Number(security.score) : null,
+    riskLevel: security.riskLevel || null,
+    criticalIssues: Number(security.criticalIssues ?? 0),
+    warningIssues: Number(security.warningIssues ?? 0),
+
+    spfStatus:
+      emailSec.spfStatus ||
+      emailSec.spf ||
+      "unknown",
+    dkimStatus:
+      emailSec.dkimStatus ||
+      emailSec.dkim ||
+      "unknown",
+    dmarcPolicy:
+      emailSec.dmarcPolicy ||
+      emailSec.dmarc ||
+      "unknown",
+    dnssecStatus:
+      emailSec.dnssecStatus ||
+      emailSec.dnssec ||
+      "unknown",
+
+    certDaysToExpire:
+      cert.daysToExpire != null
+        ? Number(cert.daysToExpire)
+        : null,
+    hasExpiringCertSoon: Boolean(
+      cert.hasExpiringCertSoon ??
+        (cert.daysToExpire != null &&
+          Number(cert.daysToExpire) <= 30)
+    ),
+
+    topIssues: issues,
   };
 }
 
@@ -160,6 +244,40 @@ const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
   );
 };
 
+// Helpers visuales para riesgo / estados
+function getRiskLabel(risk: RiskLevel | null): string {
+  if (!risk) return "Sin evaluar";
+  if (risk === "low") return "Riesgo bajo";
+  if (risk === "medium") return "Riesgo medio";
+  if (risk === "high") return "Riesgo alto";
+  return "Riesgo crítico";
+}
+
+function getRiskBadgeClasses(risk: RiskLevel | null): string {
+  if (!risk)
+    return "border-slate-600 bg-slate-900 text-slate-200";
+  if (risk === "low")
+    return "border-emerald-500/60 bg-emerald-500/10 text-emerald-300";
+  if (risk === "medium")
+    return "border-amber-500/60 bg-amber-500/10 text-amber-200";
+  if (risk === "high")
+    return "border-orange-500/60 bg-orange-500/10 text-orange-200";
+  return "border-red-500/60 bg-red-500/10 text-red-200";
+}
+
+function formatPercent(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return `${n.toFixed(1)}%`;
+}
+
+function formatDaysToExpire(days: number | null): string {
+  if (days == null) return "—";
+  if (days < 0) return "Caducado";
+  if (days === 0) return "Hoy";
+  if (days === 1) return "1 día";
+  return `${days} días`;
+}
+
 const Dashboard: React.FC = () => {
   const { account } = useAuth();
   const [domains, setDomains] = useState<Domain[] | null>(null);
@@ -167,11 +285,12 @@ const Dashboard: React.FC = () => {
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  const [recentlyVerifiedId, setRecentlyVerifiedId] = useState<string | null>(
+  const [recentlyVerifiedId, setRecentlyVerifiedId] =
+    useState<string | null>(null);
+
+  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(
     null
   );
-
-  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
 
   const [metrics, setMetrics] = useState<DomainMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
@@ -382,6 +501,12 @@ const Dashboard: React.FC = () => {
   const selectedDomain =
     domains.find((d) => d.id === selectedDomainId) || null;
 
+  const currentRiskLevel: RiskLevel | null =
+    metrics?.riskLevel ?? null;
+
+  const currentSecurityScore =
+    metrics?.securityScore != null ? metrics.securityScore : null;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 px-6 py-8">
       <DomainOnboardingModal
@@ -541,7 +666,7 @@ const Dashboard: React.FC = () => {
               <p className="text-xs text-red-400 mt-3">Error: {error}</p>
             )}
 
-            {/* métricas */}
+            {/* OVERVIEW */}
             <div className="mt-8">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-slate-200">
@@ -550,7 +675,7 @@ const Dashboard: React.FC = () => {
                 <div className="flex items-center gap-3">
                   {metrics && metrics.lastCheckedAt && (
                     <p className="text-[11px] text-slate-500">
-                      Última actualización:{" "}
+                      Último check:{" "}
                       {formatDateTime(metrics.lastCheckedAt)}
                     </p>
                   )}
@@ -602,16 +727,94 @@ const Dashboard: React.FC = () => {
 
                   {!metricsLoading && !metricsError && metrics && (
                     <>
-                      <p className="text-[11px] text-slate-500 mb-3">
-                        Ventana analizada: últimas 24 horas.
-                      </p>
+                      {/* HERO GLOBAL */}
+                      <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/60 p-3 sm:p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] text-slate-400 mb-1">
+                              Estado global
+                            </p>
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-xs text-slate-400">
+                                  Seguridad:
+                                </span>
+                                <span className="text-sm font-semibold">
+                                  {currentSecurityScore != null
+                                    ? `${currentSecurityScore.toFixed(
+                                        0
+                                      )}/100`
+                                    : "—"}
+                                </span>
+                              </div>
+                              <span
+                                className={[
+                                  "text-[10px] px-2 py-0.5 rounded-full border",
+                                  getRiskBadgeClasses(currentRiskLevel),
+                                ].join(" ")}
+                              >
+                                {getRiskLabel(currentRiskLevel)}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-400">
+                              <span>
+                                Disponibilidad 24 h:{" "}
+                                {formatPercent(metrics.uptimePercent)}
+                              </span>
+                              <span>
+                                Incidencias críticas:{" "}
+                                {metrics.criticalIssues ?? 0}
+                              </span>
+                              <span>
+                                Avisos: {metrics.warningIssues ?? 0}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-[11px] text-slate-400 space-y-1">
+                            <p>
+                              Ventana analizada:{" "}
+                              {formatDateTime(metrics.from)} –{" "}
+                              {formatDateTime(metrics.to)}
+                            </p>
+                            {metrics.certDaysToExpire != null && (
+                              <p>
+                                Certificado:{" "}
+                                {formatDaysToExpire(
+                                  metrics.certDaysToExpire
+                                )}
+                                {metrics.hasExpiringCertSoon &&
+                                  " · revisar"}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
 
-                      <UptimeTimeline hourly={metrics.hourly} />
-
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                      {/* CARDS PRINCIPALES: SEGURIDAD / DISPONIBILIDAD / EMAIL */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-4">
+                        {/* Seguridad */}
                         <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
-                            Disponibilidad estimada
+                            Ciberseguridad
+                          </p>
+                          <p className="text-lg font-semibold mb-1">
+                            {currentSecurityScore != null
+                              ? `${currentSecurityScore.toFixed(0)}/100`
+                              : "—"}
+                          </p>
+                          <p className="text-[10px] text-slate-500">
+                            Riesgo: {getRiskLabel(currentRiskLevel)}
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Críticos: {metrics.criticalIssues ?? 0} · Avisos:{" "}
+                            {metrics.warningIssues ?? 0}
+                          </p>
+                        </div>
+
+                        {/* Disponibilidad */}
+                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                          <p className="text-[11px] text-slate-400 mb-1">
+                            Disponibilidad
                           </p>
                           <p className="text-lg font-semibold text-emerald-400">
                             {metrics.uptimePercent === null
@@ -619,10 +822,43 @@ const Dashboard: React.FC = () => {
                               : `${metrics.uptimePercent.toFixed(1)}%`}
                           </p>
                           <p className="text-[10px] text-slate-500 mt-1">
-                            Basado en checks de salud en las últimas 24 h.
+                            TTFB medio:{" "}
+                            {metrics.avgTtfbMs != null
+                              ? `${metrics.avgTtfbMs} ms`
+                              : "—"}
+                          </p>
+                          <p className="text-[10px] text-slate-500">
+                            p95:{" "}
+                            {metrics.p95TtfbMs != null
+                              ? `${metrics.p95TtfbMs} ms`
+                              : "—"}
                           </p>
                         </div>
 
+                        {/* Email & Dominio */}
+                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                          <p className="text-[11px] text-slate-400 mb-1">
+                            Email y dominio
+                          </p>
+                          <p className="text-[10px] text-slate-400 leading-relaxed">
+                            SPF: {metrics.spfStatus.toUpperCase()}
+                            <br />
+                            DKIM: {metrics.dkimStatus.toUpperCase()}
+                            <br />
+                            DMARC: {metrics.dmarcPolicy.toUpperCase()}
+                            <br />
+                            DNSSEC: {metrics.dnssecStatus.toUpperCase()}
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Protege frente a suplantación de correo y fraude.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* UPTIME TIMELINE + BLOQUES DE DISPONIBILIDAD DETALLADA */}
+                      <UptimeTimeline hourly={metrics.hourly} />
+
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs mb-4">
                         <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Tiempo de respuesta medio (TTFB)
@@ -662,21 +898,6 @@ const Dashboard: React.FC = () => {
                             Checks totales: {metrics.totalChecks}
                           </p>
                         </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs">
-                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
-                          <p className="text-[11px] text-slate-400 mb-1">
-                            Checks totales (últimas 24 h)
-                          </p>
-                          <p className="text-lg font-semibold">
-                            {metrics.totalChecks ?? 0}
-                          </p>
-                          <p className="text-[10px] text-slate-500 mt-1">
-                            Número de comprobaciones realizadas contra este
-                            dominio.
-                          </p>
-                        </div>
 
                         <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
@@ -696,10 +917,62 @@ const Dashboard: React.FC = () => {
                               : "—"}
                           </p>
                         </div>
+                      </div>
+
+                      {/* RESUMEN DE INCIDENTES / ISSUES */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2 text-xs">
+                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3 sm:col-span-2">
+                          <p className="text-[11px] text-slate-400 mb-2">
+                            Principales issues detectados
+                          </p>
+                          {metrics.topIssues && metrics.topIssues.length > 0 ? (
+                            <div className="space-y-1">
+                              {metrics.topIssues.slice(0, 5).map((issue) => {
+                                const sevColor =
+                                  issue.severity === "critical"
+                                    ? "text-red-300 border-red-500/60 bg-red-500/10"
+                                    : issue.severity === "high"
+                                    ? "text-orange-200 border-orange-500/60 bg-orange-500/10"
+                                    : issue.severity === "medium"
+                                    ? "text-amber-200 border-amber-500/40 bg-amber-500/10"
+                                    : "text-slate-200 border-slate-600 bg-slate-800/60";
+                                return (
+                                  <div
+                                    key={issue.id}
+                                    className="flex items-center justify-between gap-2 rounded-lg bg-slate-950/60 border border-slate-800 px-2 py-1.5"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span
+                                        className={[
+                                          "text-[9px] px-1.5 py-0.5 rounded-full border whitespace-nowrap",
+                                          sevColor,
+                                        ].join(" ")}
+                                      >
+                                        {issue.severity.toUpperCase()}
+                                      </span>
+                                      <p className="text-[11px] text-slate-200 truncate">
+                                        {issue.title}
+                                      </p>
+                                    </div>
+                                    <p className="text-[9px] text-slate-500 whitespace-nowrap">
+                                      {formatDateTime(issue.detectedAt)}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-slate-500">
+                              No se han registrado issues detallados en esta
+                              ventana. Cuando el motor de seguridad detecte
+                              problemas, aparecerán aquí.
+                            </p>
+                          )}
+                        </div>
 
                         <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
-                            Tipos de incidencias detectadas
+                            Tipos de incidencias técnicas
                           </p>
                           <p className="text-[10px] text-slate-400 leading-relaxed">
                             Timeouts / red: {metrics.timeoutErrors} · HTTP
