@@ -59,23 +59,27 @@ function formatDateTime(iso: string): string {
   }
 }
 
+// helper para construir la URL de métricas con bust de caché
+function getMetricsUrl(domainId: string) {
+  const ts = Date.now();
+  return `${API_BASE}/domains/${encodeURIComponent(
+    domainId
+  )}/metrics/overview?_ts=${ts}`;
+}
+
 const Dashboard: React.FC = () => {
   const { account } = useAuth();
   const [domains, setDomains] = useState<Domain[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
-  // para loading del botón “Comprobar TXT”
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  // para animación verde durante 5 s
   const [recentlyVerifiedId, setRecentlyVerifiedId] = useState<string | null>(
     null
   );
 
-  // dominio seleccionado (pestaña)
   const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
 
-  // métricas del dominio seleccionado
   const [metrics, setMetrics] = useState<DomainMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [metricsError, setMetricsError] = useState<string | null>(null);
@@ -109,7 +113,6 @@ const Dashboard: React.FC = () => {
       });
   }, []);
 
-  // cuando cambian los dominios y no hay seleccionado, elegir uno
   useEffect(() => {
     if (!domains || domains.length === 0) return;
     if (!selectedDomainId) {
@@ -117,7 +120,7 @@ const Dashboard: React.FC = () => {
     }
   }, [domains, selectedDomainId]);
 
-  // Helper para mapear la respuesta de la API a DomainMetrics
+  // mapea respuesta de API -> DomainMetrics
   const buildMetricsFromApi = (data: any): DomainMetrics => {
     const totals = data.totals || {};
     const totalChecks = Number(totals.totalRequests ?? 0);
@@ -135,7 +138,7 @@ const Dashboard: React.FC = () => {
 
       const upChecks = Math.max(total - blocked, 0);
       const uptimePercent =
-        total > 0 ? (upChecks / total) * 100 : 100; // si no hay checks, asumimos 100 % para la gráfica
+        total > 0 ? (upChecks / total) * 100 : 100;
 
       return {
         bucketStart: String(b.bucketStart),
@@ -157,7 +160,8 @@ const Dashboard: React.FC = () => {
         totals.lastStatusCode != null
           ? Number(totals.lastStatusCode)
           : null,
-      lastCheckedAt: totals.lastCheckedAt ?? null,
+      // si el backend no envía lastCheckedAt, usamos data.to como momento de "foto"
+      lastCheckedAt: totals.lastCheckedAt ?? data.to ?? null,
       avgTtfbMs:
         totals.avgTtfbMs != null
           ? Math.round(Number(totals.avgTtfbMs))
@@ -176,7 +180,7 @@ const Dashboard: React.FC = () => {
     };
   };
 
-  // -------- CARGA DE MÉTRICAS DEL DOMINIO SELECCIONADO --------
+  // -------- CARGA DE MÉTRICAS --------
   const fetchMetrics = useCallback(() => {
     if (!selectedDomainId) {
       setMetrics(null);
@@ -194,14 +198,9 @@ const Dashboard: React.FC = () => {
     setMetricsLoading(true);
     setMetricsError(null);
 
-    fetch(
-      `${API_BASE}/domains/${encodeURIComponent(
-        selectedDomainId
-      )}/metrics/overview`,
-      {
-        credentials: "include",
-      }
-    )
+    fetch(getMetricsUrl(selectedDomainId), {
+      credentials: "include",
+    })
       .then((r) => r.json())
       .then((data) => {
         if (!data.success) {
@@ -211,7 +210,6 @@ const Dashboard: React.FC = () => {
           );
           return;
         }
-
         const mapped = buildMetricsFromApi(data);
         setMetrics(mapped);
       })
@@ -226,12 +224,10 @@ const Dashboard: React.FC = () => {
       });
   }, [selectedDomainId, domains]);
 
-  // carga automática cuando cambia el dominio seleccionado
   useEffect(() => {
     fetchMetrics();
   }, [fetchMetrics]);
 
-  // refresco manual desde el botón
   const handleRefreshMetrics = () => {
     if (metricsLoading) return;
     fetchMetrics();
@@ -305,7 +301,7 @@ const Dashboard: React.FC = () => {
       .map((p, idx) => {
         const x = n === 1 ? 0 : (idx / (n - 1)) * 100;
         const clamped = Math.max(0, Math.min(100, p.uptimePercent));
-        const y = 100 - clamped; // invertimos eje Y
+        const y = 100 - clamped;
         return `${x},${y}`;
       })
       .join(" ");
@@ -313,7 +309,6 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 px-6 py-8">
-      {/* Modal de alta de dominio */}
       <DomainOnboardingModal
         open={isOnboardingOpen}
         maxDomains={maxDomains}
@@ -333,7 +328,6 @@ const Dashboard: React.FC = () => {
 
       <div className="max-w-5xl mx-auto">
         {!hasAnyDomain ? (
-          // Estado vacío (sin dominios)
           <div className="mt-16 rounded-2xl border border-slate-800 bg-slate-900/80 p-8 text-center">
             <h1 className="text-xl font-semibold mb-2">
               Añade tu dominio para comenzar
@@ -354,7 +348,7 @@ const Dashboard: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* Sub-topbar de dominios (pestañas) */}
+            {/* Tabs de dominios */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2 overflow-x-auto">
                 {domains.map((d) => {
@@ -386,10 +380,10 @@ const Dashboard: React.FC = () => {
               )}
             </div>
 
-            {/* Lista de tarjetas de dominios (estado TXT) */}
+            {/* Tarjeta de verificación TXT (solo dominio seleccionado) */}
             <div className="space-y-3 mt-2">
               {domains
-                .filter((d) => d.id === selectedDomainId) // SOLO dominio seleccionado
+                .filter((d) => d.id === selectedDomainId)
                 .map((d) => {
                   const isPending = d.dns_status === "pending";
                   const isVerified = d.dns_status === "ok";
@@ -404,12 +398,10 @@ const Dashboard: React.FC = () => {
                     colorClasses =
                       "border border-amber-500/60 bg-amber-500/5";
                   }
-
                   if (isVerified) {
                     colorClasses =
                       "border border-emerald-500/40 bg-emerald-500/5";
                   }
-
                   if (justVerified) {
                     colorClasses =
                       "border border-emerald-400 bg-emerald-500/15 shadow-[0_0_0_1px_rgba(16,185,129,0.6)] animate-pulse";
@@ -471,7 +463,7 @@ const Dashboard: React.FC = () => {
               <p className="text-xs text-red-400 mt-3">Error: {error}</p>
             )}
 
-            {/* Sección de métricas del dominio seleccionado */}
+            {/* Métricas */}
             <div className="mt-8">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-slate-200">
@@ -518,7 +510,7 @@ const Dashboard: React.FC = () => {
 
                   {!metricsLoading && !metricsError && metrics && (
                     <>
-                      {/* Gráfica de uptime */}
+                      {/* Gráfica uptime */}
                       {uptimeSeries.length > 0 && (
                         <div className="mb-6 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
                           <p className="text-[11px] text-slate-400 mb-2">
@@ -530,7 +522,6 @@ const Dashboard: React.FC = () => {
                               className="w-full h-full"
                               preserveAspectRatio="none"
                             >
-                              {/* fondo */}
                               <rect
                                 x="0"
                                 y="0"
@@ -538,7 +529,6 @@ const Dashboard: React.FC = () => {
                                 height="100"
                                 className="fill-slate-950"
                               />
-                              {/* rejilla simple */}
                               {[0, 25, 50, 75, 100].map((v) => (
                                 <line
                                   key={v}
@@ -552,7 +542,6 @@ const Dashboard: React.FC = () => {
                                 />
                               ))}
 
-                              {/* línea de uptime */}
                               {uptimePolyline && (
                                 <polyline
                                   points={uptimePolyline}
@@ -626,7 +615,6 @@ const Dashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Métricas adicionales */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs">
                         <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
