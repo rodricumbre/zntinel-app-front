@@ -33,8 +33,7 @@ type DomainMetrics = {
   hourly: HourlyPoint[];
 };
 
-const API_BASE =
-  import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
+const API_BASE = import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
 
 function getMaxDomainsForPlan(plan: string | null | undefined) {
   if (plan === "business") return 2;
@@ -168,100 +167,21 @@ const Dashboard: React.FC = () => {
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  const [recentlyVerifiedId, setRecentlyVerifiedId] = useState<
-    string | null
-  >(null);
-
-  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(
+  const [recentlyVerifiedId, setRecentlyVerifiedId] = useState<string | null>(
     null
   );
+
+  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
 
   const [metrics, setMetrics] = useState<DomainMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
 
   const maxDomains = getMaxDomainsForPlan(account?.plan);
 
-
-
-const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
-const [manualRefreshing, setManualRefreshing] = useState(false);
-
-async function loadMetrics(domainId: string, opts?: { manual?: boolean }) {
-  const currentDomain = domains?.find((d) => d.id === domainId);
-
-  if (!currentDomain || currentDomain.dns_status !== "ok") {
-    setMetrics(null);
-    setMetricsError(null);
-    return;
-  }
-
-  setMetricsLoading(true);
-  setMetricsError(null);
-  if (opts?.manual) setManualRefreshing(true);
-
-  try {
-    const res = await fetch(
-      `${API_BASE}/domains/${encodeURIComponent(domainId)}/metrics/overview`,
-      { credentials: "include" }
-    );
-
-    const data = await res.json();
-
-    if (!res.ok || !data.success) {
-      setMetrics(null);
-      setMetricsError(
-        data.error || "No se han podido cargar las métricas"
-      );
-      return;
-    }
-
-    const totals = data.totals || {};
-    const totalChecks = Number(totals.totalRequests ?? 0);
-
-    const mapped: DomainMetrics = {
-      from: data.from,
-      to: data.to,
-      totalChecks,
-      uptimePercent:
-        totals.uptimePercent != null
-          ? Number(totals.uptimePercent)
-          : null,
-      lastStatusCode:
-        totals.lastStatusCode != null ? Number(totals.lastStatusCode) : null,
-      lastCheckedAt: totals.lastCheckedAt ?? null,
-      avgTtfbMs:
-        totals.avgTtfbMs != null
-          ? Math.round(Number(totals.avgTtfbMs))
-          : null,
-      p95TtfbMs:
-        totals.p95TtfbMs != null
-          ? Math.round(Number(totals.p95TtfbMs))
-          : null,
-      okChecks: Number(totals.allowedRequests ?? 0),
-      errorChecks: Number(totals.blockedRequests ?? 0),
-      timeoutErrors: Number(totals.timeoutErrors ?? 0),
-      networkErrors: Number(totals.networkErrors ?? 0),
-      http4xxErrors: Number(totals.http4xxErrors ?? 0),
-      http5xxErrors: Number(totals.http5xxErrors ?? 0),
-    };
-
-    setMetrics(mapped);
-    setLastRefreshAt(new Date().toISOString());
-  } catch (err: any) {
-    setMetrics(null);
-    setMetricsError(
-      err?.message || "Error de red al cargar las métricas"
-    );
-  } finally {
-    setMetricsLoading(false);
-    if (opts?.manual) setManualRefreshing(false);
-  }
-}
-
-
-
-  // carga inicial dominios
+  // --------- Carga inicial dominios ----------
   useEffect(() => {
     fetch(`${API_BASE}/domains`, { credentials: "include" })
       .then((r) => r.json())
@@ -288,7 +208,7 @@ async function loadMetrics(domainId: string, opts?: { manual?: boolean }) {
       });
   }, []);
 
-  // elegir dominio por defecto
+  // elegir dominio por defecto si aún no hay
   useEffect(() => {
     if (!domains || domains.length === 0) return;
     if (!selectedDomainId) {
@@ -296,126 +216,115 @@ async function loadMetrics(domainId: string, opts?: { manual?: boolean }) {
     }
   }, [domains, selectedDomainId]);
 
-  // carga de métricas al cambiar dominio
-  // Carga de métricas del dominio seleccionado (al entrar / cambiar dominio)
-useEffect(() => {
-  if (!selectedDomainId) {
-    setMetrics(null);
-    setMetricsError(null);
-    return;
-  }
+  // --------- Refresco de overview (GET + opcional POST health-check-now) ----------
+  async function refreshDomainOverview(
+    domainId: string,
+    opts?: { manual?: boolean; triggerCheck?: boolean }
+  ) {
+    const domain = domains?.find((d) => d.id === domainId);
 
-  loadMetrics(selectedDomainId);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [selectedDomainId, domains]);
+    if (!domain || domain.dns_status !== "ok") {
+      setMetrics(null);
+      setMetricsError(null);
+      return;
+    }
 
+    const isManual = !!opts?.manual;
+    const triggerCheck = !!opts?.triggerCheck;
 
-// Auto-refresh de métricas cada X segundos mientras estés en el dashboard
-useEffect(() => {
-  if (!selectedDomainId) return;
+    try {
+      setMetricsLoading(true);
+      setMetricsError(null);
+      if (isManual) setManualRefreshing(true);
 
-  // premium: el CRON chequea cada 1 min, así que refrescamos cada 60 s
-  const intervalMs = 60_000;
-
-  const id = setInterval(() => {
-    loadMetrics(selectedDomainId);
-  }, intervalMs);
-
-  return () => clearInterval(id);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [selectedDomainId]);
-
-
-  
-  async function handleManualRefresh() {
-  if (!selectedDomainId) return;
-
-  setMetricsLoading(true);
-  setMetricsError(null);
-
-  try {
-    const res = await fetch(
-      `${API_BASE}/domains/${selectedDomainId}/health-check-now`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+      // 1) Si es manual → hacer health-check-now contra la web del cliente
+      if (triggerCheck) {
+        await fetch(
+          `${API_BASE}/domains/${encodeURIComponent(
+            domainId
+          )}/health-check-now`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+          }
+        ).catch((err) => {
+          console.log("[overview] health-check-now error:", err);
+        });
       }
-    );
 
-    const data = await res.json();
+      // 2) Leer overview (últimas 24h) desde Supabase
+      const res = await fetch(getMetricsUrl(domainId), {
+        credentials: "include",
+      });
 
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || "No se pudo refrescar el estado");
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setMetrics(null);
+        setMetricsError(
+          data.error || "No se han podido cargar las métricas del dominio."
+        );
+        return;
+      }
+
+      const mapped = mapApiMetrics(data);
+
+      setMetrics(mapped);
+      setLastUpdatedAt(new Date().toISOString());
+    } catch (err: any) {
+      console.error("[overview] refresh error:", err);
+      setMetrics(null);
+      setMetricsError(
+        err?.message || "Error de red al cargar las métricas."
+      );
+    } finally {
+      setMetricsLoading(false);
+      if (isManual) setManualRefreshing(false);
     }
-
-    // Después de insertar un check → pedir nuevas métricas
-    await fetchMetrics(selectedDomainId);
-  } catch (err: any) {
-    setMetricsError(err.message || "Error desconocido en el refresco");
-  } finally {
-    setMetricsLoading(false);
   }
-}
 
-
-
-async function fetchMetrics(domainId: string) {
-  setMetricsLoading(true);
-  setMetricsError(null);
-
-  try {
-    const r = await fetch(
-      `${API_BASE}/domains/${domainId}/metrics/overview`,
-      { credentials: "include" }
-    );
-
-    const data = await r.json();
-
-    if (!data.success) {
-      throw new Error(data.error || "Error al obtener métricas");
+  // Carga de métricas al cambiar de dominio (solo GET; no toca la web)
+  useEffect(() => {
+    if (!selectedDomainId || !domains) {
+      setMetrics(null);
+      setMetricsError(null);
+      return;
     }
 
-    const totals = data.totals || {};
+    const current = domains.find((d) => d.id === selectedDomainId);
+    if (!current || current.dns_status !== "ok") {
+      setMetrics(null);
+      setMetricsError(null);
+      return;
+    }
 
-    setMetrics({
-      from: data.from,
-      to: data.to,
-      totalChecks: Number(totals.totalRequests ?? 0),
-      uptimePercent:
-        totals.uptimePercent != null
-          ? Number(totals.uptimePercent)
-          : null,
-      lastStatusCode:
-        totals.lastStatusCode != null
-          ? Number(totals.lastStatusCode)
-          : null,
-      lastCheckedAt: totals.lastCheckedAt ?? null,
-      avgTtfbMs:
-        totals.avgTtfbMs != null
-          ? Math.round(totals.avgTtfbMs)
-          : null,
-      p95TtfbMs:
-        totals.p95TtfbMs != null
-          ? Math.round(totals.p95TtfbMs)
-          : null,
-      okChecks: Number(totals.allowedRequests ?? 0),
-      errorChecks: Number(totals.blockedRequests ?? 0),
-      timeoutErrors: Number(totals.timeoutErrors ?? 0),
-      networkErrors: Number(totals.networkErrors ?? 0),
-      http4xxErrors: Number(totals.http4xxErrors ?? 0),
-      http5xxErrors: Number(totals.http5xxErrors ?? 0),
+    refreshDomainOverview(selectedDomainId, {
+      manual: false,
+      triggerCheck: false,
     });
-  } catch (err: any) {
-    setMetricsError(err.message || "Error cargando métricas");
-  } finally {
-    setMetricsLoading(false);
-  }
-}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDomainId, domains]);
 
+  // Auto-refresh de métricas cada 60 s (solo GET; el CRON es quien mete checks)
+  useEffect(() => {
+    if (!selectedDomainId) return;
 
+    const intervalMs = 60_000;
 
+    const id = setInterval(() => {
+      refreshDomainOverview(selectedDomainId, {
+        manual: false,
+        triggerCheck: false,
+      });
+    }, intervalMs);
+
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDomainId]);
+
+  // --------- Verificación de dominio ----------
   async function handleVerify(domain: Domain) {
     if (verifyingId) return;
     setVerifyingId(domain.id);
@@ -645,12 +554,26 @@ async function fetchMetrics(domainId: string) {
                       {formatDateTime(metrics.lastCheckedAt)}
                     </p>
                   )}
+                  {lastUpdatedAt && (
+                    <p className="text-[10px] text-slate-500">
+                      Refrescado desde el panel:{" "}
+                      {formatDateTime(lastUpdatedAt)}
+                    </p>
+                  )}
                   <button
-                    onClick={() => loadMetrics(selectedDomain.id, { manual: true })}
+                    onClick={() =>
+                      selectedDomain &&
+                      refreshDomainOverview(selectedDomain.id, {
+                        manual: true,
+                        triggerCheck: true,
+                      })
+                    }
                     className="rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-100 border border-slate-600"
                     disabled={manualRefreshing || metricsLoading}
-                    >
-                    {manualRefreshing || metricsLoading ? "Actualizando…" : "Actualizar"}
+                  >
+                    {manualRefreshing || metricsLoading
+                      ? "Actualizando…"
+                      : "Actualizar"}
                   </button>
                 </div>
               </div>
