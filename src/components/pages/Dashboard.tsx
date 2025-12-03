@@ -57,7 +57,6 @@ function formatDateTime(iso: string): string {
   }
 }
 
-// cache buster para que Cloudflare/navegador no guarden el overview
 function getMetricsUrl(domainId: string) {
   const ts = Date.now();
   return `${API_BASE}/domains/${encodeURIComponent(
@@ -117,7 +116,6 @@ function mapApiMetrics(data: any): DomainMetrics {
   };
 }
 
-// gráfica simple de uptime 24h
 const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
   if (!hourly || hourly.length === 0) return null;
 
@@ -126,7 +124,7 @@ const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
       hourly.length === 1 ? 0 : (idx / (hourly.length - 1)) * 100;
 
     const uptime = h.uptimePercent ?? 100;
-    const y = 100 - Math.max(0, Math.min(uptime, 100)); // invertido
+    const y = 100 - Math.max(0, Math.min(uptime, 100));
 
     return `${x},${y}`;
   });
@@ -186,7 +184,7 @@ const Dashboard: React.FC = () => {
 
   const maxDomains = getMaxDomainsForPlan(account?.plan);
 
-  // Carga inicial de dominios
+  // carga inicial dominios
   useEffect(() => {
     fetch(`${API_BASE}/domains`, { credentials: "include" })
       .then((r) => r.json())
@@ -213,7 +211,7 @@ const Dashboard: React.FC = () => {
       });
   }, []);
 
-  // si cambian dominios y no hay seleccionado, elegir uno
+  // elegir dominio por defecto
   useEffect(() => {
     if (!domains || domains.length === 0) return;
     if (!selectedDomainId) {
@@ -221,7 +219,7 @@ const Dashboard: React.FC = () => {
     }
   }, [domains, selectedDomainId]);
 
-  // carga de métricas del dominio seleccionado
+  // carga de métricas cuando cambia dominio
   useEffect(() => {
     if (!selectedDomainId) {
       setMetrics(null);
@@ -266,7 +264,7 @@ const Dashboard: React.FC = () => {
       });
   }, [selectedDomainId, domains]);
 
-  // botón "Actualizar": vuelve a pedir el overview con cache buster
+  // botón Actualizar -> check ahora + recargar métricas
   const handleRefreshMetrics = async () => {
     if (!selectedDomainId) return;
 
@@ -274,6 +272,18 @@ const Dashboard: React.FC = () => {
     setMetricsError(null);
 
     try {
+      // 1) fuerza un nuevo health check ahora
+      await fetch(
+        `${API_BASE}/domains/${encodeURIComponent(
+          selectedDomainId
+        )}/health-check-now`,
+        {
+          method: "POST",
+          credentials: "include",
+        }
+      );
+
+      // 2) recarga overview (con cache buster)
       const res = await fetch(getMetricsUrl(selectedDomainId), {
         credentials: "include",
       });
@@ -356,7 +366,6 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 px-6 py-8">
-      {/* Modal alta dominio */}
       <DomainOnboardingModal
         open={isOnboardingOpen}
         maxDomains={maxDomains}
@@ -396,7 +405,7 @@ const Dashboard: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* Tabs dominios */}
+            {/* pestañas dominios */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2 overflow-x-auto">
                 {domains.map((d) => {
@@ -428,7 +437,7 @@ const Dashboard: React.FC = () => {
               )}
             </div>
 
-            {/* Card verificación TXT */}
+            {/* tarjeta verificación */}
             <div className="space-y-3 mt-2">
               {domains
                 .filter((d) => d.id === selectedDomainId)
@@ -514,13 +523,12 @@ const Dashboard: React.FC = () => {
               <p className="text-xs text-red-400 mt-3">Error: {error}</p>
             )}
 
-            {/* Métricas */}
+            {/* métricas */}
             <div className="mt-8">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-slate-200">
                   Overview del dominio seleccionado
                 </h2>
-
                 <div className="flex items-center gap-3">
                   {metrics && metrics.lastCheckedAt && (
                     <p className="text-[11px] text-slate-500">
