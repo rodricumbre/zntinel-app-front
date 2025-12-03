@@ -1,5 +1,5 @@
 // src/components/pages/Dashboard.tsx
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import { DomainOnboardingModal } from "@/components/domains/DomainOnboardingModal";
 import { useAuth } from "@/lib/auth";
 
@@ -12,9 +12,7 @@ type Domain = {
 
 type HourlyPoint = {
   bucketStart: string;
-  uptimePercent: number;
-  totalChecks: number;
-  errorChecks: number;
+  uptimePercent: number | null;
 };
 
 type DomainMetrics = {
@@ -35,8 +33,7 @@ type DomainMetrics = {
   hourly: HourlyPoint[];
 };
 
-const API_BASE =
-  import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
+const API_BASE = import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
 
 function getMaxDomainsForPlan(plan: string | null | undefined) {
   if (plan === "business") return 2;
@@ -59,13 +56,116 @@ function formatDateTime(iso: string): string {
   }
 }
 
-// helper para construir la URL de métricas con bust de caché
 function getMetricsUrl(domainId: string) {
   const ts = Date.now();
   return `${API_BASE}/domains/${encodeURIComponent(
     domainId
   )}/metrics/overview?_ts=${ts}`;
 }
+
+function mapApiMetrics(data: any): DomainMetrics {
+  const totals = data?.totals || {};
+  const hourlyRaw: any[] = data?.hourly || [];
+
+  const totalChecks = Number(totals.totalRequests ?? 0);
+
+  const hourly: HourlyPoint[] = hourlyRaw.map((h) => {
+    const total =
+      Number(h.totalRequests ?? h.total_requests ?? 0) || 0;
+    const blocked =
+      Number(h.blockedRequests ?? h.blocked_requests ?? 0) || 0;
+
+    const uptimePercent =
+      total > 0 ? ((total - blocked) / total) * 100 : null;
+
+    return {
+      bucketStart: h.bucketStart ?? h.bucket_start,
+      uptimePercent,
+    };
+  });
+
+  return {
+    from: data.from,
+    to: data.to,
+    totalChecks,
+    uptimePercent:
+      totals.uptimePercent != null
+        ? Number(totals.uptimePercent)
+        : null,
+    lastStatusCode:
+      totals.lastStatusCode != null
+        ? Number(totals.lastStatusCode)
+        : null,
+    lastCheckedAt: totals.lastCheckedAt ?? null,
+    avgTtfbMs:
+      totals.avgTtfbMs != null
+        ? Math.round(Number(totals.avgTtfbMs))
+        : null,
+    p95TtfbMs:
+      totals.p95TtfbMs != null
+        ? Math.round(Number(totals.p95TtfbMs))
+        : null,
+    okChecks: Number(totals.allowedRequests ?? 0),
+    errorChecks: Number(totals.blockedRequests ?? 0),
+    timeoutErrors: Number(totals.timeoutErrors ?? 0),
+    networkErrors: Number(totals.networkErrors ?? 0),
+    http4xxErrors: Number(totals.http4xxErrors ?? 0),
+    http5xxErrors: Number(totals.http5xxErrors ?? 0),
+    hourly,
+  };
+}
+
+// Pequeña gráfica de línea para el uptime de las últimas 24h
+const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
+  if (!hourly || hourly.length === 0) return null;
+
+  const points = hourly.map((h, idx) => {
+    const x =
+      hourly.length === 1
+        ? 0
+        : (idx / (hourly.length - 1)) * 100;
+
+    const uptime = h.uptimePercent ?? 100; // sin datos, lo mostramos arriba
+    const y = 100 - Math.max(0, Math.min(uptime, 100)); // 0–100 invertido
+
+    return `${x},${y}`;
+  });
+
+  return (
+    <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[11px] text-slate-400">
+          Uptime últimas 24 h
+        </p>
+        <p className="text-[10px] text-slate-500">
+          Cada punto representa 1 hora
+        </p>
+      </div>
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        className="w-full h-24 text-cyan-400"
+      >
+        {/* línea base */}
+        <line
+          x1="0"
+          y1="100"
+          x2="100"
+          y2="100"
+          stroke="rgba(148, 163, 184, 0.4)"
+          strokeWidth={0.5}
+        />
+        {/* polyline de uptime */}
+        <polyline
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          points={points.join(" ")}
+        />
+      </svg>
+    </div>
+  );
+};
 
 const Dashboard: React.FC = () => {
   const { account } = useAuth();
@@ -74,11 +174,13 @@ const Dashboard: React.FC = () => {
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  const [recentlyVerifiedId, setRecentlyVerifiedId] = useState<string | null>(
+  const [recentlyVerifiedId, setRecentlyVerifiedId] = useState<
+    string | null
+  >(null);
+
+  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(
     null
   );
-
-  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
 
   const [metrics, setMetrics] = useState<DomainMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
@@ -86,7 +188,7 @@ const Dashboard: React.FC = () => {
 
   const maxDomains = getMaxDomainsForPlan(account?.plan);
 
-  // -------- CARGA INICIAL DE DOMINIOS --------
+  // Carga inicial de dominios
   useEffect(() => {
     fetch(`${API_BASE}/domains`, { credentials: "include" })
       .then((r) => r.json())
@@ -113,6 +215,7 @@ const Dashboard: React.FC = () => {
       });
   }, []);
 
+  // Si cambian dominios y no hay seleccionado, elegir uno
   useEffect(() => {
     if (!domains || domains.length === 0) return;
     if (!selectedDomainId) {
@@ -120,75 +223,17 @@ const Dashboard: React.FC = () => {
     }
   }, [domains, selectedDomainId]);
 
-  // mapea respuesta de API -> DomainMetrics
-  const buildMetricsFromApi = (data: any): DomainMetrics => {
-    const totals = data.totals || {};
-    const totalChecks = Number(totals.totalRequests ?? 0);
-
-    const hourlyRaw: any[] = Array.isArray(data.hourly) ? data.hourly : [];
-    const hourly: HourlyPoint[] = hourlyRaw.map((b) => {
-      const total =
-        b.totalRequests != null
-          ? Number(b.totalRequests)
-          : Number(b.totalChecks ?? 0);
-      const blocked =
-        b.blockedRequests != null
-          ? Number(b.blockedRequests)
-          : Number(b.errorChecks ?? 0);
-
-      const upChecks = Math.max(total - blocked, 0);
-      const uptimePercent =
-        total > 0 ? (upChecks / total) * 100 : 100;
-
-      return {
-        bucketStart: String(b.bucketStart),
-        uptimePercent,
-        totalChecks: total,
-        errorChecks: blocked,
-      };
-    });
-
-    return {
-      from: data.from,
-      to: data.to,
-      totalChecks,
-      uptimePercent:
-        totals.uptimePercent != null
-          ? Number(totals.uptimePercent)
-          : null,
-      lastStatusCode:
-        totals.lastStatusCode != null
-          ? Number(totals.lastStatusCode)
-          : null,
-      // si el backend no envía lastCheckedAt, usamos data.to como momento de "foto"
-      lastCheckedAt: totals.lastCheckedAt ?? data.to ?? null,
-      avgTtfbMs:
-        totals.avgTtfbMs != null
-          ? Math.round(Number(totals.avgTtfbMs))
-          : null,
-      p95TtfbMs:
-        totals.p95TtfbMs != null
-          ? Math.round(Number(totals.p95TtfbMs))
-          : null,
-      okChecks: Number(totals.allowedRequests ?? 0),
-      errorChecks: Number(totals.blockedRequests ?? 0),
-      timeoutErrors: Number(totals.timeoutErrors ?? 0),
-      networkErrors: Number(totals.networkErrors ?? 0),
-      http4xxErrors: Number(totals.http4xxErrors ?? 0),
-      http5xxErrors: Number(totals.http5xxErrors ?? 0),
-      hourly,
-    };
-  };
-
-  // -------- CARGA DE MÉTRICAS --------
-  const fetchMetrics = useCallback(() => {
+  // Carga de métricas del dominio seleccionado
+  useEffect(() => {
     if (!selectedDomainId) {
       setMetrics(null);
       setMetricsError(null);
       return;
     }
 
-    const currentDomain = domains?.find((d) => d.id === selectedDomainId);
+    const currentDomain = domains?.find(
+      (d) => d.id === selectedDomainId
+    );
     if (!currentDomain || currentDomain.dns_status !== "ok") {
       setMetrics(null);
       setMetricsError(null);
@@ -210,8 +255,7 @@ const Dashboard: React.FC = () => {
           );
           return;
         }
-        const mapped = buildMetricsFromApi(data);
-        setMetrics(mapped);
+        setMetrics(mapApiMetrics(data));
       })
       .catch((err) => {
         setMetrics(null);
@@ -224,16 +268,50 @@ const Dashboard: React.FC = () => {
       });
   }, [selectedDomainId, domains]);
 
-  useEffect(() => {
-    fetchMetrics();
-  }, [fetchMetrics]);
+  // Botón de actualizar: fuerza health-check inmediato + recarga overview
+  const handleRefreshMetrics = async () => {
+    if (!selectedDomainId || metricsLoading) return;
 
-  const handleRefreshMetrics = () => {
-    if (metricsLoading) return;
-    fetchMetrics();
+    setMetricsLoading(true);
+    setMetricsError(null);
+
+    try {
+      // 1) Forzar un nuevo health-check ahora
+      await fetch(
+        `${API_BASE}/domains/${encodeURIComponent(
+          selectedDomainId
+        )}/health-check-now`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      // 2) Volver a leer las métricas (ya incluye ese check nuevo)
+      const res = await fetch(getMetricsUrl(selectedDomainId), {
+        credentials: "include",
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        setMetrics(null);
+        setMetricsError(
+          data.error || "No se han podido cargar las métricas"
+        );
+        return;
+      }
+
+      setMetrics(mapApiMetrics(data));
+    } catch (err: any) {
+      setMetricsError(
+        err?.message || "Error de red al actualizar métricas"
+      );
+    } finally {
+      setMetricsLoading(false);
+    }
   };
 
-  // -------- VERIFICACIÓN DE DOMINIOS --------
   async function handleVerify(domain: Domain) {
     if (verifyingId) return;
     setVerifyingId(domain.id);
@@ -264,7 +342,6 @@ const Dashboard: React.FC = () => {
 
         if (selectedDomainId === domain.id) {
           setMetrics(null);
-          fetchMetrics();
         }
 
         setTimeout(() => {
@@ -292,21 +369,6 @@ const Dashboard: React.FC = () => {
   const selectedDomain =
     domains.find((d) => d.id === selectedDomainId) || null;
 
-  // Datos para la gráfica de uptime
-  const uptimeSeries: HourlyPoint[] = metrics?.hourly ?? [];
-  let uptimePolyline = "";
-  if (uptimeSeries.length > 0) {
-    const n = uptimeSeries.length;
-    uptimePolyline = uptimeSeries
-      .map((p, idx) => {
-        const x = n === 1 ? 0 : (idx / (n - 1)) * 100;
-        const clamped = Math.max(0, Math.min(100, p.uptimePercent));
-        const y = 100 - clamped;
-        return `${x},${y}`;
-      })
-      .join(" ");
-  }
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 px-6 py-8">
       <DomainOnboardingModal
@@ -333,8 +395,8 @@ const Dashboard: React.FC = () => {
               Añade tu dominio para comenzar
             </h1>
             <p className="text-sm text-slate-400 mb-6">
-              Antes de ver métricas o configurar reglas, conecta al menos un
-              dominio a Zntinel.
+              Antes de ver métricas o configurar reglas, conecta al menos
+              un dominio a Zntinel.
             </p>
             <button
               onClick={() => setIsOnboardingOpen(true)}
@@ -380,7 +442,7 @@ const Dashboard: React.FC = () => {
               )}
             </div>
 
-            {/* Tarjeta de verificación TXT (solo dominio seleccionado) */}
+            {/* Card de verificación TXT del dominio seleccionado */}
             <div className="space-y-3 mt-2">
               {domains
                 .filter((d) => d.id === selectedDomainId)
@@ -398,17 +460,22 @@ const Dashboard: React.FC = () => {
                     colorClasses =
                       "border border-amber-500/60 bg-amber-500/5";
                   }
+
                   if (isVerified) {
                     colorClasses =
                       "border border-emerald-500/40 bg-emerald-500/5";
                   }
+
                   if (justVerified) {
                     colorClasses =
                       "border border-emerald-400 bg-emerald-500/15 shadow-[0_0_0_1px_rgba(16,185,129,0.6)] animate-pulse";
                   }
 
                   return (
-                    <div key={d.id} className={`${baseClasses} ${colorClasses}`}>
+                    <div
+                      key={d.id}
+                      className={`${baseClasses} ${colorClasses}`}
+                    >
                       <div className="flex items-center justify-between mb-1">
                         <div className="font-medium">{d.hostname}</div>
                         {isVerified && (
@@ -426,8 +493,8 @@ const Dashboard: React.FC = () => {
                       {isPending && (
                         <div className="mt-2 space-y-2">
                           <p className="text-slate-300 text-xs">
-                            Añade este registro TXT en el DNS de tu dominio y
-                            después pulsa “Comprobar TXT”:
+                            Añade este registro TXT en el DNS de tu dominio
+                            y después pulsa “Comprobar TXT”:
                           </p>
                           <code className="block text-[11px] bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
                             Nombre: _zntinel.{d.hostname}
@@ -463,22 +530,23 @@ const Dashboard: React.FC = () => {
               <p className="text-xs text-red-400 mt-3">Error: {error}</p>
             )}
 
-            {/* Métricas */}
+            {/* Sección de métricas */}
             <div className="mt-8">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-slate-200">
                   Overview del dominio seleccionado
                 </h2>
-                <div className="flex items-center gap-2">
+
+                <div className="flex items-center gap-3">
                   {metrics && metrics.lastCheckedAt && (
-                    <span className="text-[11px] text-slate-500">
+                    <p className="text-[11px] text-slate-500">
                       Última actualización:{" "}
                       {formatDateTime(metrics.lastCheckedAt)}
-                    </span>
+                    </p>
                   )}
                   <button
                     onClick={handleRefreshMetrics}
-                    disabled={metricsLoading}
+                    disabled={metricsLoading || !selectedDomain}
                     className="text-[11px] px-2 py-1 rounded-md border border-slate-700 bg-slate-900/80 hover:border-cyan-500/70 hover:text-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {metricsLoading ? "Actualizando…" : "Actualizar"}
@@ -496,7 +564,7 @@ const Dashboard: React.FC = () => {
                 </p>
               ) : (
                 <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
-                  {metricsLoading && (
+                  {metricsLoading && !metrics && (
                     <p className="text-xs text-slate-400">
                       Cargando métricas de {selectedDomain.hostname}…
                     </p>
@@ -510,54 +578,12 @@ const Dashboard: React.FC = () => {
 
                   {!metricsLoading && !metricsError && metrics && (
                     <>
-                      {/* Gráfica uptime */}
-                      {uptimeSeries.length > 0 && (
-                        <div className="mb-6 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-                          <p className="text-[11px] text-slate-400 mb-2">
-                            Uptime por hora (últimas 24 h)
-                          </p>
-                          <div className="h-40">
-                            <svg
-                              viewBox="0 0 100 100"
-                              className="w-full h-full"
-                              preserveAspectRatio="none"
-                            >
-                              <rect
-                                x="0"
-                                y="0"
-                                width="100"
-                                height="100"
-                                className="fill-slate-950"
-                              />
-                              {[0, 25, 50, 75, 100].map((v) => (
-                                <line
-                                  key={v}
-                                  x1="0"
-                                  x2="100"
-                                  y1={100 - v}
-                                  y2={100 - v}
-                                  className="stroke-slate-800"
-                                  strokeWidth={v === 100 ? 0 : 0.4}
-                                  strokeDasharray={v === 100 ? 0 : 2}
-                                />
-                              ))}
-
-                              {uptimePolyline && (
-                                <polyline
-                                  points={uptimePolyline}
-                                  fill="none"
-                                  className="stroke-cyan-400"
-                                  strokeWidth={1.5}
-                                />
-                              )}
-                            </svg>
-                          </div>
-                        </div>
-                      )}
-
                       <p className="text-[11px] text-slate-500 mb-3">
                         Ventana analizada: últimas 24 horas.
                       </p>
+
+                      {/* Gráfica de uptime 24h */}
+                      <UptimeTimeline hourly={metrics.hourly} />
 
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
                         <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
@@ -615,6 +641,7 @@ const Dashboard: React.FC = () => {
                         </div>
                       </div>
 
+                      {/* Métricas adicionales */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs">
                         <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
@@ -653,13 +680,13 @@ const Dashboard: React.FC = () => {
                             Tipos de incidencias detectadas
                           </p>
                           <p className="text-[10px] text-slate-400 leading-relaxed">
-                            Timeouts / red: {metrics.timeoutErrors} · HTTP 5xx:{" "}
-                            {metrics.http5xxErrors} · HTTP 4xx / WAF:{" "}
+                            Timeouts / red: {metrics.timeoutErrors} · HTTP
+                            5xx: {metrics.http5xxErrors} · HTTP 4xx / WAF:{" "}
                             {metrics.http4xxErrors}
                           </p>
                           <p className="text-[10px] text-slate-500 mt-1">
-                            Te ayuda a ver si los problemas vienen de caídas,
-                            red o bloqueos de aplicación.
+                            Te ayuda a ver si los problemas vienen de
+                            caídas, red o bloqueos de aplicación.
                           </p>
                         </div>
                       </div>
@@ -671,7 +698,8 @@ const Dashboard: React.FC = () => {
                     (!metrics || metrics.totalChecks === 0) && (
                       <p className="text-xs text-slate-500">
                         Aún no hay suficientes datos para este dominio. Deja
-                        pasar unos minutos para que se recojan checks de salud.
+                        pasar unos minutos para que se recojan checks de
+                        salud.
                       </p>
                     )}
                 </div>
