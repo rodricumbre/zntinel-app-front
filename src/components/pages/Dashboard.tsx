@@ -10,6 +10,14 @@ type Domain = {
   verification_token: string;
 };
 
+type VerifyFeedback =
+  | {
+      domainId: string;
+      type: "error";
+      message: string;
+    }
+  | null;
+
 const API_BASE =
   import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
 
@@ -25,9 +33,12 @@ const Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
-  // para loading del botón “Comprobar TXT”
+  // loading del botón “Comprobar TXT”
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  // para animación verde durante 5 s
+  // feedback de verificación por dominio (mensaje 7 s)
+  const [verifyFeedback, setVerifyFeedback] = useState<VerifyFeedback>(null);
+
+  // animación verde durante 5 s
   const [recentlyVerifiedId, setRecentlyVerifiedId] = useState<string | null>(
     null
   );
@@ -58,6 +69,27 @@ const Dashboard: React.FC = () => {
       });
   }, []);
 
+  function showVerifyError(domainId: string, message: string) {
+    setVerifyFeedback({ domainId, type: "error", message });
+
+    // borrar mensaje a los 7 s
+    setTimeout(() => {
+      setVerifyFeedback((current) =>
+        current && current.domainId === domainId ? null : current
+      );
+    }, 7000);
+  }
+
+  function mapReasonToMessage(domain: Domain, reason?: string | null): string {
+    if (reason === "DNS_LOOKUP_FAILED") {
+      return "No se ha podido consultar los DNS del dominio. Vuelve a intentarlo en unos minutos.";
+    }
+    if (reason === "TXT_TOKEN_NOT_FOUND") {
+      return `No se ha encontrado un registro TXT válido. Revisa que exista el registro "_zntinel.${domain.hostname}" y que el valor coincida exactamente con el token mostrado.`;
+    }
+    return "El dominio todavía no está verificado. Revisa el registro TXT y vuelve a intentarlo en unos minutos.";
+  }
+
   async function handleVerify(domain: Domain) {
     if (verifyingId) return;
     setVerifyingId(domain.id);
@@ -74,11 +106,14 @@ const Dashboard: React.FC = () => {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setError(data.error || "No se ha podido verificar el dominio");
+        const msg =
+          data.error ||
+          `No se ha podido verificar el dominio (HTTP ${res.status})`;
+        showVerifyError(domain.id, msg);
         return;
       }
 
-      // si el backend devuelve verified=true y status ok
+      // Caso verificado OK
       if (data.verified && data.status === "ok") {
         setDomains((prev) =>
           prev.map((d) =>
@@ -87,15 +122,23 @@ const Dashboard: React.FC = () => {
         );
         setRecentlyVerifiedId(domain.id);
 
-        // quitamos la animación verde a los 5 s
         setTimeout(() => {
           setRecentlyVerifiedId((current) =>
             current === domain.id ? null : current
           );
         }, 5000);
+        return;
       }
+
+      // Caso éxito de API pero NO verificado aún
+      const reason: string | null | undefined = data.reason;
+      const msg = mapReasonToMessage(domain, reason);
+      showVerifyError(domain.id, msg);
     } catch (err: any) {
-      setError(err.message || "Error de red verificando el dominio");
+      showVerifyError(
+        domain.id,
+        err?.message || "Error de red verificando el dominio"
+      );
     } finally {
       setVerifyingId(null);
     }
@@ -185,10 +228,14 @@ const Dashboard: React.FC = () => {
               }
 
               if (justVerified) {
-                // animación verde intensa durante 5s
                 colorClasses =
                   "border border-emerald-400 bg-emerald-500/15 shadow-[0_0_0_1px_rgba(16,185,129,0.6)] animate-pulse";
               }
+
+              const feedbackForDomain =
+                verifyFeedback && verifyFeedback.domainId === d.id
+                  ? verifyFeedback
+                  : null;
 
               return (
                 <div key={d.id} className={`${baseClasses} ${colorClasses}`}>
@@ -227,6 +274,12 @@ const Dashboard: React.FC = () => {
                           ? "Comprobando TXT…"
                           : "Comprobar TXT"}
                       </button>
+
+                      {feedbackForDomain && feedbackForDomain.type === "error" && (
+                        <p className="mt-2 text-xs text-red-300">
+                          {feedbackForDomain.message}
+                        </p>
+                      )}
                     </div>
                   )}
 
