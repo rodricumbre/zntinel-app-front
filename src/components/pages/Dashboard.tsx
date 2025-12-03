@@ -33,7 +33,8 @@ type DomainMetrics = {
   hourly: HourlyPoint[];
 };
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
+const API_BASE =
+  import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
 
 function getMaxDomainsForPlan(plan: string | null | undefined) {
   if (plan === "business") return 2;
@@ -56,6 +57,7 @@ function formatDateTime(iso: string): string {
   }
 }
 
+// cache buster para que Cloudflare/navegador no guarden el overview
 function getMetricsUrl(domainId: string) {
   const ts = Date.now();
   return `${API_BASE}/domains/${encodeURIComponent(
@@ -115,18 +117,16 @@ function mapApiMetrics(data: any): DomainMetrics {
   };
 }
 
-// Pequeña gráfica de línea para el uptime de las últimas 24h
+// gráfica simple de uptime 24h
 const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
   if (!hourly || hourly.length === 0) return null;
 
   const points = hourly.map((h, idx) => {
     const x =
-      hourly.length === 1
-        ? 0
-        : (idx / (hourly.length - 1)) * 100;
+      hourly.length === 1 ? 0 : (idx / (hourly.length - 1)) * 100;
 
-    const uptime = h.uptimePercent ?? 100; // sin datos, lo mostramos arriba
-    const y = 100 - Math.max(0, Math.min(uptime, 100)); // 0–100 invertido
+    const uptime = h.uptimePercent ?? 100;
+    const y = 100 - Math.max(0, Math.min(uptime, 100)); // invertido
 
     return `${x},${y}`;
   });
@@ -146,16 +146,14 @@ const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
         preserveAspectRatio="none"
         className="w-full h-24 text-cyan-400"
       >
-        {/* línea base */}
         <line
           x1="0"
           y1="100"
           x2="100"
           y2="100"
-          stroke="rgba(148, 163, 184, 0.4)"
+          stroke="rgba(148,163,184,0.4)"
           strokeWidth={0.5}
         />
-        {/* polyline de uptime */}
         <polyline
           fill="none"
           stroke="currentColor"
@@ -215,7 +213,7 @@ const Dashboard: React.FC = () => {
       });
   }, []);
 
-  // Si cambian dominios y no hay seleccionado, elegir uno
+  // si cambian dominios y no hay seleccionado, elegir uno
   useEffect(() => {
     if (!domains || domains.length === 0) return;
     if (!selectedDomainId) {
@@ -223,7 +221,7 @@ const Dashboard: React.FC = () => {
     }
   }, [domains, selectedDomainId]);
 
-  // Carga de métricas del dominio seleccionado
+  // carga de métricas del dominio seleccionado
   useEffect(() => {
     if (!selectedDomainId) {
       setMetrics(null);
@@ -268,27 +266,14 @@ const Dashboard: React.FC = () => {
       });
   }, [selectedDomainId, domains]);
 
-  // Botón de actualizar: fuerza health-check inmediato + recarga overview
+  // botón "Actualizar": vuelve a pedir el overview con cache buster
   const handleRefreshMetrics = async () => {
-    if (!selectedDomainId || metricsLoading) return;
+    if (!selectedDomainId) return;
 
     setMetricsLoading(true);
     setMetricsError(null);
 
     try {
-      // 1) Forzar un nuevo health-check ahora
-      await fetch(
-        `${API_BASE}/domains/${encodeURIComponent(
-          selectedDomainId
-        )}/health-check-now`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-
-      // 2) Volver a leer las métricas (ya incluye ese check nuevo)
       const res = await fetch(getMetricsUrl(selectedDomainId), {
         credentials: "include",
       });
@@ -371,6 +356,7 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 px-6 py-8">
+      {/* Modal alta dominio */}
       <DomainOnboardingModal
         open={isOnboardingOpen}
         maxDomains={maxDomains}
@@ -410,7 +396,7 @@ const Dashboard: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* Tabs de dominios */}
+            {/* Tabs dominios */}
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2 overflow-x-auto">
                 {domains.map((d) => {
@@ -442,7 +428,7 @@ const Dashboard: React.FC = () => {
               )}
             </div>
 
-            {/* Card de verificación TXT del dominio seleccionado */}
+            {/* Card verificación TXT */}
             <div className="space-y-3 mt-2">
               {domains
                 .filter((d) => d.id === selectedDomainId)
@@ -460,12 +446,10 @@ const Dashboard: React.FC = () => {
                     colorClasses =
                       "border border-amber-500/60 bg-amber-500/5";
                   }
-
                   if (isVerified) {
                     colorClasses =
                       "border border-emerald-500/40 bg-emerald-500/5";
                   }
-
                   if (justVerified) {
                     colorClasses =
                       "border border-emerald-400 bg-emerald-500/15 shadow-[0_0_0_1px_rgba(16,185,129,0.6)] animate-pulse";
@@ -530,7 +514,7 @@ const Dashboard: React.FC = () => {
               <p className="text-xs text-red-400 mt-3">Error: {error}</p>
             )}
 
-            {/* Sección de métricas */}
+            {/* Métricas */}
             <div className="mt-8">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-slate-200">
@@ -582,7 +566,6 @@ const Dashboard: React.FC = () => {
                         Ventana analizada: últimas 24 horas.
                       </p>
 
-                      {/* Gráfica de uptime 24h */}
                       <UptimeTimeline hourly={metrics.hourly} />
 
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
@@ -641,7 +624,6 @@ const Dashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Métricas adicionales */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs">
                         <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
