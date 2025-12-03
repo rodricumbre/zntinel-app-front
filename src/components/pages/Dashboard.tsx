@@ -219,51 +219,13 @@ const Dashboard: React.FC = () => {
 
   // carga de métricas al cambiar dominio
   useEffect(() => {
-    if (!selectedDomainId) {
-      setMetrics(null);
-      setMetricsError(null);
-      return;
-    }
-
-    const currentDomain = domains?.find(
-      (d) => d.id === selectedDomainId
-    );
-    if (!currentDomain || currentDomain.dns_status !== "ok") {
-      setMetrics(null);
-      setMetricsError(null);
-      return;
-    }
-
-    setMetricsLoading(true);
-    setMetricsError(null);
-
-    fetch(getMetricsUrl(selectedDomainId), {
-      credentials: "include",
-    })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.success) {
-          setMetrics(null);
-          setMetricsError(
-            data.error || "No se han podido cargar las métricas"
-          );
-          return;
-        }
-        setMetrics(mapApiMetrics(data));
-      })
-      .catch((err) => {
-        setMetrics(null);
-        setMetricsError(
-          err?.message || "Error de red al cargar las métricas"
-        );
-      })
-      .finally(() => {
-        setMetricsLoading(false);
-      });
-  }, [selectedDomainId, domains]);
+  if (selectedDomainId && selectedDomain?.dns_status === "ok") {
+    fetchMetrics(selectedDomainId);
+  }
+}, [selectedDomainId, domains]);
 
   
-  const handleRefreshMetrics = async () => {
+  async function handleManualRefresh() {
   if (!selectedDomainId) return;
 
   setMetricsLoading(true);
@@ -271,36 +233,85 @@ const Dashboard: React.FC = () => {
 
   try {
     const res = await fetch(
-      `${API_BASE}/domains/${encodeURIComponent(
-        selectedDomainId
-      )}/health-check-now`,
+      `${API_BASE}/domains/${selectedDomainId}/health-check-now`,
       {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
       }
     );
 
     const data = await res.json();
 
     if (!res.ok || !data.success) {
-      setMetrics(null);
-      setMetricsError(
-        data.error || "No se han podido cargar las métricas"
-      );
-      return;
+      throw new Error(data.error || "No se pudo refrescar el estado");
     }
 
-    // health-check-now devuelve el mismo formato que metrics/overview
-    setMetrics(mapApiMetrics(data));
+    // Después de insertar un check → pedir nuevas métricas
+    await fetchMetrics(selectedDomainId);
   } catch (err: any) {
-    setMetricsError(
-      err?.message || "Error de red al actualizar métricas"
-    );
+    setMetricsError(err.message || "Error desconocido en el refresco");
   } finally {
     setMetricsLoading(false);
   }
-};
+}
+
+
+
+async function fetchMetrics(domainId: string) {
+  setMetricsLoading(true);
+  setMetricsError(null);
+
+  try {
+    const r = await fetch(
+      `${API_BASE}/domains/${domainId}/metrics/overview`,
+      { credentials: "include" }
+    );
+
+    const data = await r.json();
+
+    if (!data.success) {
+      throw new Error(data.error || "Error al obtener métricas");
+    }
+
+    const totals = data.totals || {};
+
+    setMetrics({
+      from: data.from,
+      to: data.to,
+      totalChecks: Number(totals.totalRequests ?? 0),
+      uptimePercent:
+        totals.uptimePercent != null
+          ? Number(totals.uptimePercent)
+          : null,
+      lastStatusCode:
+        totals.lastStatusCode != null
+          ? Number(totals.lastStatusCode)
+          : null,
+      lastCheckedAt: totals.lastCheckedAt ?? null,
+      avgTtfbMs:
+        totals.avgTtfbMs != null
+          ? Math.round(totals.avgTtfbMs)
+          : null,
+      p95TtfbMs:
+        totals.p95TtfbMs != null
+          ? Math.round(totals.p95TtfbMs)
+          : null,
+      okChecks: Number(totals.allowedRequests ?? 0),
+      errorChecks: Number(totals.blockedRequests ?? 0),
+      timeoutErrors: Number(totals.timeoutErrors ?? 0),
+      networkErrors: Number(totals.networkErrors ?? 0),
+      http4xxErrors: Number(totals.http4xxErrors ?? 0),
+      http5xxErrors: Number(totals.http5xxErrors ?? 0),
+    });
+  } catch (err: any) {
+    setMetricsError(err.message || "Error cargando métricas");
+  } finally {
+    setMetricsLoading(false);
+  }
+}
+
 
 
   async function handleVerify(domain: Domain) {
@@ -533,7 +544,7 @@ const Dashboard: React.FC = () => {
                     </p>
                   )}
                   <button
-                    onClick={handleRefreshMetrics}
+                    onClick={handleManualRefresh}
                     disabled={metricsLoading || !selectedDomain}
                     className="text-[11px] px-2 py-1 rounded-md border border-slate-700 bg-slate-900/80 hover:border-cyan-500/70 hover:text-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
