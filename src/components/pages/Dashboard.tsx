@@ -117,13 +117,53 @@ const Dashboard: React.FC = () => {
       }
     )
       .then((r) => r.json())
+          fetch(
+      `${API_BASE}/domains/${encodeURIComponent(
+        selectedDomainId
+      )}/metrics/overview`,
+      {
+        credentials: "include",
+      }
+    )
+      .then((r) => r.json())
       .then((data) => {
         if (!data.success) {
           setMetrics(null);
-          setMetricsError(data.error || "No se han podido cargar las métricas");
+          setMetricsError(
+            data.error || "No se han podido cargar las métricas"
+          );
           return;
         }
-        setMetrics(data.metrics as DomainMetrics);
+
+        // La API actual devuelve: { success, from, to, totals, hourly }
+        const totals = data.totals || {};
+        const mapped: DomainMetrics = {
+          from: data.from,
+          to: data.to,
+          totalChecks:
+            typeof totals.totalRequests === "number"
+              ? totals.totalRequests
+              : 0,
+          uptimePercent:
+            typeof totals.uptimePercent === "number"
+              ? totals.uptimePercent
+              : null,
+          lastStatusCode:
+            typeof totals.lastStatusCode === "number"
+              ? totals.lastStatusCode
+              : null,
+          lastCheckedAt: totals.lastCheckedAt || null,
+          avgTtfbMs:
+            typeof totals.avgTtfbMs === "number"
+              ? Math.round(totals.avgTtfbMs)
+              : null,
+          p95TtfbMs:
+            typeof totals.p95TtfbMs === "number"
+              ? totals.p95TtfbMs
+              : null,
+        };
+
+        setMetrics(mapped);
       })
       .catch((err) => {
         setMetrics(null);
@@ -134,6 +174,7 @@ const Dashboard: React.FC = () => {
       .finally(() => {
         setMetricsLoading(false);
       });
+
   }, [selectedDomainId, domains]);
 
   async function handleVerify(domain: Domain) {
