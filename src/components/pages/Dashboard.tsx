@@ -1,5 +1,5 @@
 // src/components/pages/Dashboard.tsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { DomainOnboardingModal } from "@/components/domains/DomainOnboardingModal";
 import { useAuth } from "@/lib/auth";
 
@@ -8,6 +8,13 @@ type Domain = {
   hostname: string;
   dns_status: "pending" | "ok";
   verification_token: string;
+};
+
+type HourlyPoint = {
+  bucketStart: string;
+  uptimePercent: number;
+  totalChecks: number;
+  errorChecks: number;
 };
 
 type DomainMetrics = {
@@ -25,8 +32,8 @@ type DomainMetrics = {
   networkErrors: number;
   http4xxErrors: number;
   http5xxErrors: number;
+  hourly: HourlyPoint[];
 };
-
 
 const API_BASE =
   import.meta.env.VITE_API_URL ?? "https://api.zntinel.com";
@@ -36,7 +43,6 @@ function getMaxDomainsForPlan(plan: string | null | undefined) {
   if (plan === "premium") return 5;
   return 1;
 }
-
 
 function formatDateTime(iso: string): string {
   if (!iso) return "";
@@ -52,7 +58,6 @@ function formatDateTime(iso: string): string {
     return iso;
   }
 }
-
 
 const Dashboard: React.FC = () => {
   const { account } = useAuth();
@@ -77,35 +82,32 @@ const Dashboard: React.FC = () => {
 
   const maxDomains = getMaxDomainsForPlan(account?.plan);
 
-  // Carga inicial de dominios
-  // Carga inicial de dominios
-useEffect(() => {
-  fetch(`${API_BASE}/domains`, { credentials: "include" })
-    .then((r) => r.json())
-    .then((data) => {
-      if (data.success) {
-        const list: Domain[] = data.domains || [];
-        setDomains(list);
+  // -------- CARGA INICIAL DE DOMINIOS --------
+  useEffect(() => {
+    fetch(`${API_BASE}/domains`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          const list: Domain[] = data.domains || [];
+          setDomains(list);
 
-        if (list.length === 0) {
-          setIsOnboardingOpen(true);
+          if (list.length === 0) {
+            setIsOnboardingOpen(true);
+          } else {
+            setSelectedDomainId((prev) => prev ?? list[0].id);
+          }
         } else {
-          // seleccionamos el primero por defecto si no hay seleccionado
-          setSelectedDomainId((prev) => prev ?? list[0].id);
+          setError(data.error || "Error cargando dominios");
+          setDomains([]);
+          setIsOnboardingOpen(true);
         }
-      } else {
-        setError(data.error || "Error cargando dominios");
+      })
+      .catch((err) => {
+        setError(String(err));
         setDomains([]);
         setIsOnboardingOpen(true);
-      }
-    })
-    .catch((err) => {
-      setError(String(err));
-      setDomains([]);
-      setIsOnboardingOpen(true);
-    });
-}, []);
-
+      });
+  }, []);
 
   // cuando cambian los dominios y no hay seleccionado, elegir uno
   useEffect(() => {
@@ -115,90 +117,127 @@ useEffect(() => {
     }
   }, [domains, selectedDomainId]);
 
-  // Carga de métricas del dominio seleccionado
-  // Carga de métricas del dominio seleccionado
-useEffect(() => {
-  if (!selectedDomainId) {
-    setMetrics(null);
-    setMetricsError(null);
-    return;
-  }
+  // Helper para mapear la respuesta de la API a DomainMetrics
+  const buildMetricsFromApi = (data: any): DomainMetrics => {
+    const totals = data.totals || {};
+    const totalChecks = Number(totals.totalRequests ?? 0);
 
-  const currentDomain = domains?.find((d) => d.id === selectedDomainId);
-  // si el dominio aún está pendiente, no pedimos métricas
-  if (!currentDomain || currentDomain.dns_status !== "ok") {
-    setMetrics(null);
-    setMetricsError(null);
-    return;
-  }
+    const hourlyRaw: any[] = Array.isArray(data.hourly) ? data.hourly : [];
+    const hourly: HourlyPoint[] = hourlyRaw.map((b) => {
+      const total =
+        b.totalRequests != null
+          ? Number(b.totalRequests)
+          : Number(b.totalChecks ?? 0);
+      const blocked =
+        b.blockedRequests != null
+          ? Number(b.blockedRequests)
+          : Number(b.errorChecks ?? 0);
 
-  setMetricsLoading(true);
-  setMetricsError(null);
+      const upChecks = Math.max(total - blocked, 0);
+      const uptimePercent =
+        total > 0 ? (upChecks / total) * 100 : 100; // si no hay checks, asumimos 100 % para la gráfica
 
-  fetch(
-    `${API_BASE}/domains/${encodeURIComponent(
-      selectedDomainId
-    )}/metrics/overview`,
-    {
-      credentials: "include",
+      return {
+        bucketStart: String(b.bucketStart),
+        uptimePercent,
+        totalChecks: total,
+        errorChecks: blocked,
+      };
+    });
+
+    return {
+      from: data.from,
+      to: data.to,
+      totalChecks,
+      uptimePercent:
+        totals.uptimePercent != null
+          ? Number(totals.uptimePercent)
+          : null,
+      lastStatusCode:
+        totals.lastStatusCode != null
+          ? Number(totals.lastStatusCode)
+          : null,
+      lastCheckedAt: totals.lastCheckedAt ?? null,
+      avgTtfbMs:
+        totals.avgTtfbMs != null
+          ? Math.round(Number(totals.avgTtfbMs))
+          : null,
+      p95TtfbMs:
+        totals.p95TtfbMs != null
+          ? Math.round(Number(totals.p95TtfbMs))
+          : null,
+      okChecks: Number(totals.allowedRequests ?? 0),
+      errorChecks: Number(totals.blockedRequests ?? 0),
+      timeoutErrors: Number(totals.timeoutErrors ?? 0),
+      networkErrors: Number(totals.networkErrors ?? 0),
+      http4xxErrors: Number(totals.http4xxErrors ?? 0),
+      http5xxErrors: Number(totals.http5xxErrors ?? 0),
+      hourly,
+    };
+  };
+
+  // -------- CARGA DE MÉTRICAS DEL DOMINIO SELECCIONADO --------
+  const fetchMetrics = useCallback(() => {
+    if (!selectedDomainId) {
+      setMetrics(null);
+      setMetricsError(null);
+      return;
     }
-  )
-    .then((r) => r.json())
-    .then((data) => {
-      if (!data.success) {
+
+    const currentDomain = domains?.find((d) => d.id === selectedDomainId);
+    if (!currentDomain || currentDomain.dns_status !== "ok") {
+      setMetrics(null);
+      setMetricsError(null);
+      return;
+    }
+
+    setMetricsLoading(true);
+    setMetricsError(null);
+
+    fetch(
+      `${API_BASE}/domains/${encodeURIComponent(
+        selectedDomainId
+      )}/metrics/overview`,
+      {
+        credentials: "include",
+      }
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.success) {
+          setMetrics(null);
+          setMetricsError(
+            data.error || "No se han podido cargar las métricas"
+          );
+          return;
+        }
+
+        const mapped = buildMetricsFromApi(data);
+        setMetrics(mapped);
+      })
+      .catch((err) => {
         setMetrics(null);
         setMetricsError(
-          data.error || "No se han podido cargar las métricas"
+          err?.message || "Error de red al cargar las métricas"
         );
-        return;
-      }
+      })
+      .finally(() => {
+        setMetricsLoading(false);
+      });
+  }, [selectedDomainId, domains]);
 
-      const totals = data.totals || {};
-      const totalChecks = Number(totals.totalRequests ?? 0);
+  // carga automática cuando cambia el dominio seleccionado
+  useEffect(() => {
+    fetchMetrics();
+  }, [fetchMetrics]);
 
-      const mapped: DomainMetrics = {
-        from: data.from,
-        to: data.to,
-        totalChecks,
-        uptimePercent:
-          totals.uptimePercent != null
-            ? Number(totals.uptimePercent)
-            : null,
-        lastStatusCode:
-          totals.lastStatusCode != null
-            ? Number(totals.lastStatusCode)
-            : null,
-        lastCheckedAt: totals.lastCheckedAt ?? null,
-        avgTtfbMs:
-          totals.avgTtfbMs != null
-            ? Math.round(Number(totals.avgTtfbMs))
-            : null,
-        p95TtfbMs:
-          totals.p95TtfbMs != null
-            ? Math.round(Number(totals.p95TtfbMs))
-            : null,
-        okChecks: Number(totals.allowedRequests ?? 0),
-        errorChecks: Number(totals.blockedRequests ?? 0),
-        timeoutErrors: Number(totals.timeoutErrors ?? 0),
-        networkErrors: Number(totals.networkErrors ?? 0),
-        http4xxErrors: Number(totals.http4xxErrors ?? 0),
-        http5xxErrors: Number(totals.http5xxErrors ?? 0),
-      };
+  // refresco manual desde el botón
+  const handleRefreshMetrics = () => {
+    if (metricsLoading) return;
+    fetchMetrics();
+  };
 
-      setMetrics(mapped);
-    })
-    .catch((err) => {
-      setMetrics(null);
-      setMetricsError(
-        err?.message || "Error de red al cargar las métricas"
-      );
-    })
-    .finally(() => {
-      setMetricsLoading(false);
-    });
-}, [selectedDomainId, domains]);
-
-
+  // -------- VERIFICACIÓN DE DOMINIOS --------
   async function handleVerify(domain: Domain) {
     if (verifyingId) return;
     setVerifyingId(domain.id);
@@ -219,7 +258,6 @@ useEffect(() => {
         return;
       }
 
-      // si el backend devuelve verified=true y status ok
       if (data.verified && data.status === "ok") {
         setDomains((prev) =>
           prev.map((d) =>
@@ -228,12 +266,11 @@ useEffect(() => {
         );
         setRecentlyVerifiedId(domain.id);
 
-        // reseteamos métricas para forzar recarga si este dominio está seleccionado
         if (selectedDomainId === domain.id) {
           setMetrics(null);
+          fetchMetrics();
         }
 
-        // quitamos la animación verde a los 5 s
         setTimeout(() => {
           setRecentlyVerifiedId((current) =>
             current === domain.id ? null : current
@@ -258,6 +295,21 @@ useEffect(() => {
   const hasAnyDomain = domains.length > 0;
   const selectedDomain =
     domains.find((d) => d.id === selectedDomainId) || null;
+
+  // Datos para la gráfica de uptime
+  const uptimeSeries: HourlyPoint[] = metrics?.hourly ?? [];
+  let uptimePolyline = "";
+  if (uptimeSeries.length > 0) {
+    const n = uptimeSeries.length;
+    uptimePolyline = uptimeSeries
+      .map((p, idx) => {
+        const x = n === 1 ? 0 : (idx / (n - 1)) * 100;
+        const clamped = Math.max(0, Math.min(100, p.uptimePercent));
+        const y = 100 - clamped; // invertimos eje Y
+        return `${x},${y}`;
+      })
+      .join(" ");
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 px-6 py-8">
@@ -336,83 +388,84 @@ useEffect(() => {
 
             {/* Lista de tarjetas de dominios (estado TXT) */}
             <div className="space-y-3 mt-2">
-  {domains
-    .filter((d) => d.id === selectedDomainId) // SOLO dominio seleccionado
-    .map((d) => {
-      const isPending = d.dns_status === "pending";
-      const isVerified = d.dns_status === "ok";
-      const justVerified = recentlyVerifiedId === d.id;
+              {domains
+                .filter((d) => d.id === selectedDomainId) // SOLO dominio seleccionado
+                .map((d) => {
+                  const isPending = d.dns_status === "pending";
+                  const isVerified = d.dns_status === "ok";
+                  const justVerified = recentlyVerifiedId === d.id;
 
-      const baseClasses =
-        "rounded-xl p-4 text-sm transition-all duration-500";
-      let colorClasses =
-        "border border-slate-800 bg-slate-900/80";
+                  const baseClasses =
+                    "rounded-xl p-4 text-sm transition-all duration-500";
+                  let colorClasses =
+                    "border border-slate-800 bg-slate-900/80";
 
-      if (isPending) {
-        colorClasses = "border border-amber-500/60 bg-amber-500/5";
-      }
+                  if (isPending) {
+                    colorClasses =
+                      "border border-amber-500/60 bg-amber-500/5";
+                  }
 
-      if (isVerified) {
-        colorClasses = "border border-emerald-500/40 bg-emerald-500/5";
-      }
+                  if (isVerified) {
+                    colorClasses =
+                      "border border-emerald-500/40 bg-emerald-500/5";
+                  }
 
-      if (justVerified) {
-        colorClasses =
-          "border border-emerald-400 bg-emerald-500/15 shadow-[0_0_0_1px_rgba(16,185,129,0.6)] animate-pulse";
-      }
+                  if (justVerified) {
+                    colorClasses =
+                      "border border-emerald-400 bg-emerald-500/15 shadow-[0_0_0_1px_rgba(16,185,129,0.6)] animate-pulse";
+                  }
 
-      return (
-        <div key={d.id} className={`${baseClasses} ${colorClasses}`}>
-          <div className="flex items-center justify-between mb-1">
-            <div className="font-medium">{d.hostname}</div>
-            {isVerified && (
-              <span className="text-[11px] rounded-full border border-emerald-500/60 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
-                Verificado
-              </span>
-            )}
-            {isPending && (
-              <span className="text-[11px] rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-amber-300">
-                Pendiente de verificación
-              </span>
-            )}
-          </div>
+                  return (
+                    <div key={d.id} className={`${baseClasses} ${colorClasses}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="font-medium">{d.hostname}</div>
+                        {isVerified && (
+                          <span className="text-[11px] rounded-full border border-emerald-500/60 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                            Verificado
+                          </span>
+                        )}
+                        {isPending && (
+                          <span className="text-[11px] rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-amber-300">
+                            Pendiente de verificación
+                          </span>
+                        )}
+                      </div>
 
-          {isPending && (
-            <div className="mt-2 space-y-2">
-              <p className="text-slate-300 text-xs">
-                Añade este registro TXT en el DNS de tu dominio y después
-                pulsa “Comprobar TXT”:
-              </p>
-              <code className="block text-[11px] bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
-                Nombre: _zntinel.{d.hostname}
-                <br />
-                Valor: {d.verification_token}
-              </code>
+                      {isPending && (
+                        <div className="mt-2 space-y-2">
+                          <p className="text-slate-300 text-xs">
+                            Añade este registro TXT en el DNS de tu dominio y
+                            después pulsa “Comprobar TXT”:
+                          </p>
+                          <code className="block text-[11px] bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
+                            Nombre: _zntinel.{d.hostname}
+                            <br />
+                            Valor: {d.verification_token}
+                          </code>
 
-              <button
-                onClick={() => handleVerify(d)}
-                disabled={verifyingId === d.id}
-                className="mt-2 inline-flex items-center rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-3 py-1.5 text-xs font-medium text-slate-950"
-              >
-                {verifyingId === d.id
-                  ? "Comprobando TXT…"
-                  : "Comprobar TXT"}
-              </button>
+                          <button
+                            onClick={() => handleVerify(d)}
+                            disabled={verifyingId === d.id}
+                            className="mt-2 inline-flex items-center rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-3 py-1.5 text-xs font-medium text-slate-950"
+                          >
+                            {verifyingId === d.id
+                              ? "Comprobando TXT…"
+                              : "Comprobar TXT"}
+                          </button>
+                        </div>
+                      )}
+
+                      {isVerified && (
+                        <p className="mt-2 text-emerald-200 text-xs">
+                          {justVerified
+                            ? "Dominio verificado correctamente. Cargando métricas…"
+                            : "Dominio verificado. Las métricas del panel se basan en este dominio."}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
             </div>
-          )}
-
-          {isVerified && (
-            <p className="mt-2 text-emerald-200 text-xs">
-              {justVerified
-                ? "Dominio verificado correctamente. Cargando métricas…"
-                : "Dominio verificado. Las métricas del panel se basan en este dominio."}
-            </p>
-          )}
-        </div>
-      );
-    })}
-</div>
-
 
             {error && (
               <p className="text-xs text-red-400 mt-3">Error: {error}</p>
@@ -420,17 +473,26 @@ useEffect(() => {
 
             {/* Sección de métricas del dominio seleccionado */}
             <div className="mt-8">
-  <div className="flex items-center justify-between mb-3">
-    <h2 className="text-sm font-semibold text-slate-200">
-      Overview del dominio seleccionado
-    </h2>
-    {metrics && metrics.lastCheckedAt && (
-      <p className="text-[11px] text-slate-500">
-        Última actualización: {formatDateTime(metrics.lastCheckedAt)}
-      </p>
-    )}
-  </div>
-
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-slate-200">
+                  Overview del dominio seleccionado
+                </h2>
+                <div className="flex items-center gap-2">
+                  {metrics && metrics.lastCheckedAt && (
+                    <span className="text-[11px] text-slate-500">
+                      Última actualización:{" "}
+                      {formatDateTime(metrics.lastCheckedAt)}
+                    </span>
+                  )}
+                  <button
+                    onClick={handleRefreshMetrics}
+                    disabled={metricsLoading}
+                    className="text-[11px] px-2 py-1 rounded-md border border-slate-700 bg-slate-900/80 hover:border-cyan-500/70 hover:text-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {metricsLoading ? "Actualizando…" : "Actualizar"}
+                  </button>
+                </div>
+              </div>
 
               {!selectedDomain ? (
                 <p className="text-xs text-slate-500">
@@ -456,9 +518,58 @@ useEffect(() => {
 
                   {!metricsLoading && !metricsError && metrics && (
                     <>
+                      {/* Gráfica de uptime */}
+                      {uptimeSeries.length > 0 && (
+                        <div className="mb-6 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+                          <p className="text-[11px] text-slate-400 mb-2">
+                            Uptime por hora (últimas 24 h)
+                          </p>
+                          <div className="h-40">
+                            <svg
+                              viewBox="0 0 100 100"
+                              className="w-full h-full"
+                              preserveAspectRatio="none"
+                            >
+                              {/* fondo */}
+                              <rect
+                                x="0"
+                                y="0"
+                                width="100"
+                                height="100"
+                                className="fill-slate-950"
+                              />
+                              {/* rejilla simple */}
+                              {[0, 25, 50, 75, 100].map((v) => (
+                                <line
+                                  key={v}
+                                  x1="0"
+                                  x2="100"
+                                  y1={100 - v}
+                                  y2={100 - v}
+                                  className="stroke-slate-800"
+                                  strokeWidth={v === 100 ? 0 : 0.4}
+                                  strokeDasharray={v === 100 ? 0 : 2}
+                                />
+                              ))}
+
+                              {/* línea de uptime */}
+                              {uptimePolyline && (
+                                <polyline
+                                  points={uptimePolyline}
+                                  fill="none"
+                                  className="stroke-cyan-400"
+                                  strokeWidth={1.5}
+                                />
+                              )}
+                            </svg>
+                          </div>
+                        </div>
+                      )}
+
                       <p className="text-[11px] text-slate-500 mb-3">
                         Ventana analizada: últimas 24 horas.
                       </p>
+
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
                         <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
@@ -513,7 +624,9 @@ useEffect(() => {
                             Checks totales: {metrics.totalChecks}
                           </p>
                         </div>
-                                              {/* Métricas adicionales */}
+                      </div>
+
+                      {/* Métricas adicionales */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs">
                         <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
@@ -523,7 +636,8 @@ useEffect(() => {
                             {metrics.totalChecks ?? 0}
                           </p>
                           <p className="text-[10px] text-slate-500 mt-1">
-                            Número de comprobaciones realizadas contra este dominio.
+                            Número de comprobaciones realizadas contra este
+                            dominio.
                           </p>
                         </div>
 
@@ -538,7 +652,8 @@ useEffect(() => {
                             Ratio de error:{" "}
                             {metrics.totalChecks > 0
                               ? `${(
-                                  (metrics.errorChecks / metrics.totalChecks) *
+                                  (metrics.errorChecks /
+                                    metrics.totalChecks) *
                                   100
                                 ).toFixed(1)}%`
                               : "—"}
@@ -559,7 +674,6 @@ useEffect(() => {
                             red o bloqueos de aplicación.
                           </p>
                         </div>
-                      </div>
                       </div>
                     </>
                   )}
