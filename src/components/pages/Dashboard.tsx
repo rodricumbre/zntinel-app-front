@@ -10,6 +10,22 @@ type Domain = {
   verification_token: string;
 };
 
+type DomainMetricsOverview = {
+  from: string;
+  to: string;
+  totals: {
+    totalRequests: number;
+    allowedRequests: number;
+    blockedRequests: number;
+    botRequests: number;
+  };
+  hourly: {
+    bucketStart: string;
+    totalRequests: number;
+    blockedRequests: number;
+  }[];
+};
+
 type VerifyFeedback =
   | {
       domainId: string;
@@ -30,21 +46,26 @@ function getMaxDomainsForPlan(plan: string | null | undefined) {
 const Dashboard: React.FC = () => {
   const { account } = useAuth();
   const [domains, setDomains] = useState<Domain[] | null>(null);
+  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
+
   const [error, setError] = useState<string | null>(null);
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
-  // loading del botón “Comprobar TXT”
+  // verificación TXT
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
-  // feedback de verificación por dominio (mensaje 7 s)
   const [verifyFeedback, setVerifyFeedback] = useState<VerifyFeedback>(null);
-
-  // animación verde durante 5 s
   const [recentlyVerifiedId, setRecentlyVerifiedId] = useState<string | null>(
     null
   );
 
+  // métricas
+  const [metrics, setMetrics] = useState<DomainMetricsOverview | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const maxDomains = getMaxDomainsForPlan(account?.plan);
 
+  // Cargar dominios
   useEffect(() => {
     fetch(`${API_BASE}/domains`, { credentials: "include" })
       .then((r) => r.json())
@@ -52,9 +73,10 @@ const Dashboard: React.FC = () => {
         if (data.success) {
           const list: Domain[] = data.domains || [];
           setDomains(list);
-
           if (list.length === 0) {
             setIsOnboardingOpen(true);
+          } else {
+            setSelectedDomainId((prev) => prev ?? list[0].id);
           }
         } else {
           setError(data.error || "Error cargando dominios");
@@ -69,10 +91,12 @@ const Dashboard: React.FC = () => {
       });
   }, []);
 
+  const selectedDomain =
+    domains?.find((d) => d.id === selectedDomainId) ?? null;
+
+  // Helpers verificación
   function showVerifyError(domainId: string, message: string) {
     setVerifyFeedback({ domainId, type: "error", message });
-
-    // borrar mensaje a los 7 s
     setTimeout(() => {
       setVerifyFeedback((current) =>
         current && current.domainId === domainId ? null : current
@@ -113,7 +137,6 @@ const Dashboard: React.FC = () => {
         return;
       }
 
-      // Caso verificado OK
       if (data.verified && data.status === "ok") {
         setDomains((prev) =>
           prev.map((d) =>
@@ -130,7 +153,6 @@ const Dashboard: React.FC = () => {
         return;
       }
 
-      // Caso éxito de API pero NO verificado aún
       const reason: string | null | undefined = data.reason;
       const msg = mapReasonToMessage(domain, reason);
       showVerifyError(domain.id, msg);
@@ -144,6 +166,41 @@ const Dashboard: React.FC = () => {
     }
   }
 
+  // Cargar métricas cuando el dominio seleccionado esté verificado
+  useEffect(() => {
+    if (!selectedDomain || selectedDomain.dns_status !== "ok") {
+      setMetrics(null);
+      setMetricsError(null);
+      return;
+    }
+
+    setMetricsLoading(true);
+    setMetricsError(null);
+
+    fetch(
+      `${API_BASE}/domains/${encodeURIComponent(
+        selectedDomain.id
+      )}/metrics/overview`,
+      { credentials: "include" }
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.success) {
+          setMetrics(null);
+          setMetricsError(
+            data.error || "No se han podido cargar las métricas."
+          );
+          return;
+        }
+        setMetrics(data as DomainMetricsOverview);
+      })
+      .catch((err) => {
+        setMetrics(null);
+        setMetricsError(String(err));
+      })
+      .finally(() => setMetricsLoading(false));
+  }, [selectedDomain?.id, selectedDomain?.dns_status]);
+
   if (domains === null) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
@@ -154,9 +211,14 @@ const Dashboard: React.FC = () => {
 
   const hasAnyDomain = domains.length > 0;
 
+  // Para el gráfico de barras horizontales
+  const maxHourlyTotal =
+    metrics?.hourly.length
+      ? Math.max(...metrics.hourly.map((h) => h.totalRequests || 0))
+      : 0;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 px-6 py-8">
-      {/* Modal de alta de dominio */}
       <DomainOnboardingModal
         open={isOnboardingOpen}
         maxDomains={maxDomains}
@@ -167,13 +229,13 @@ const Dashboard: React.FC = () => {
         }}
         onDomainCreated={(newDomain) => {
           setDomains((prev) => [...prev, newDomain]);
+          setSelectedDomainId(newDomain.id);
           setIsOnboardingOpen(false);
         }}
       />
 
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {!hasAnyDomain ? (
-          // Estado vacío (sin dominios)
           <div className="mt-16 rounded-2xl border border-slate-800 bg-slate-900/80 p-8 text-center">
             <h1 className="text-xl font-semibold mb-2">
               Añade tu dominio para comenzar
@@ -193,10 +255,37 @@ const Dashboard: React.FC = () => {
             )}
           </div>
         ) : (
-          // Listado / tarjetas de dominios
-          <div className="space-y-4 mt-8">
-            <div className="flex items-center justify-between mb-2">
-              <h1 className="text-xl font-semibold">Dominios protegidos</h1>
+          <>
+            {/* SUBTOPBAR DE DOMINIOS */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex flex-wrap gap-2">
+                {domains.map((d) => {
+                  const active = d.id === selectedDomainId;
+                  const pending = d.dns_status === "pending";
+
+                  return (
+                    <button
+                      key={d.id}
+                      onClick={() => setSelectedDomainId(d.id)}
+                      className={[
+                        "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                        active
+                          ? "bg-slate-100 text-slate-900 border-slate-100"
+                          : "bg-slate-900 text-slate-200 border-slate-700 hover:border-slate-500",
+                      ].join(" ")}
+                    >
+                      <span>{d.hostname}</span>
+                      {pending && (
+                        <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-amber-300">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                          Pendiente
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
               {domains.length < maxDomains && (
                 <button
                   onClick={() => setIsOnboardingOpen(true)}
@@ -207,97 +296,186 @@ const Dashboard: React.FC = () => {
               )}
             </div>
 
-            {domains.map((d) => {
-              const isPending = d.dns_status === "pending";
-              const isVerified = d.dns_status === "ok";
-              const justVerified = recentlyVerifiedId === d.id;
+            {/* CONTENIDO DEL DOMINIO SELECCIONADO */}
+            {selectedDomain && (
+              <div className="space-y-6">
+                {/* Bloque de verificación / info */}
+                {selectedDomain.dns_status === "pending" && (
+                  <div className="rounded-2xl border border-amber-500/60 bg-amber-500/5 p-5 text-sm">
+                    <h2 className="text-sm font-semibold text-amber-100 mb-2">
+                      Verifica el dominio para empezar a recoger métricas
+                    </h2>
+                    <p className="text-xs text-amber-100/80 mb-3">
+                      Añade este registro TXT en el DNS de tu dominio y después
+                      pulsa “Comprobar TXT”.
+                    </p>
+                    <code className="block text-[11px] bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2 mb-3 text-amber-50">
+                      Nombre: _zntinel.{selectedDomain.hostname}
+                      <br />
+                      Valor: {selectedDomain.verification_token}
+                    </code>
 
-              const baseClasses =
-                "rounded-xl p-4 text-sm transition-all duration-500";
-              let colorClasses =
-                "border border-slate-800 bg-slate-900/80"; // por defecto
+                    <button
+                      onClick={() => handleVerify(selectedDomain)}
+                      disabled={verifyingId === selectedDomain.id}
+                      className="inline-flex items-center rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-3 py-1.5 text-xs font-medium text-slate-950"
+                    >
+                      {verifyingId === selectedDomain.id
+                        ? "Comprobando TXT…"
+                        : "Comprobar TXT"}
+                    </button>
 
-              if (isPending) {
-                colorClasses =
-                  "border border-amber-500/60 bg-amber-500/5";
-              }
-
-              if (isVerified) {
-                colorClasses =
-                  "border border-emerald-500/40 bg-emerald-500/5";
-              }
-
-              if (justVerified) {
-                colorClasses =
-                  "border border-emerald-400 bg-emerald-500/15 shadow-[0_0_0_1px_rgba(16,185,129,0.6)] animate-pulse";
-              }
-
-              const feedbackForDomain =
-                verifyFeedback && verifyFeedback.domainId === d.id
-                  ? verifyFeedback
-                  : null;
-
-              return (
-                <div key={d.id} className={`${baseClasses} ${colorClasses}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="font-medium">{d.hostname}</div>
-                    {isVerified && (
-                      <span className="text-[11px] rounded-full border border-emerald-500/60 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
-                        Verificado
-                      </span>
-                    )}
-                    {isPending && (
-                      <span className="text-[11px] rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-amber-300">
-                        Pendiente de verificación
-                      </span>
-                    )}
-                  </div>
-
-                  {isPending && (
-                    <div className="mt-2 space-y-2">
-                      <p className="text-slate-300 text-xs">
-                        Añade este registro TXT en el DNS de tu dominio y
-                        después pulsa “Comprobar TXT”:
-                      </p>
-                      <code className="block text-[11px] bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
-                        Nombre: _zntinel.{d.hostname}
-                        <br />
-                        Valor: {d.verification_token}
-                      </code>
-
-                      <button
-                        onClick={() => handleVerify(d)}
-                        disabled={verifyingId === d.id}
-                        className="mt-2 inline-flex items-center rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-3 py-1.5 text-xs font-medium text-slate-950"
-                      >
-                        {verifyingId === d.id
-                          ? "Comprobando TXT…"
-                          : "Comprobar TXT"}
-                      </button>
-
-                      {feedbackForDomain && feedbackForDomain.type === "error" && (
+                    {verifyFeedback &&
+                      verifyFeedback.domainId === selectedDomain.id &&
+                      verifyFeedback.type === "error" && (
                         <p className="mt-2 text-xs text-red-300">
-                          {feedbackForDomain.message}
+                          {verifyFeedback.message}
                         </p>
                       )}
+                  </div>
+                )}
+
+                {selectedDomain.dns_status === "ok" && (
+                  <>
+                    <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/5 p-4 text-xs text-emerald-100">
+                      {recentlyVerifiedId === selectedDomain.id
+                        ? "Dominio verificado correctamente. Empezando a recopilar métricas..."
+                        : "Dominio verificado. Las métricas de este panel se basan en este dominio."}
                     </div>
-                  )}
 
-                  {isVerified && (
-                    <p className="mt-2 text-emerald-200 text-xs">
-                      {justVerified
-                        ? "Dominio verificado correctamente. Cargando métricas…"
-                        : "Dominio verificado. Las métricas del panel se basan en este dominio."}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
+                    {/* BLOQUE DE MÉTRICAS */}
+                    <section>
+                      <h2 className="text-sm font-semibold mb-3">
+                        Resumen de tráfico (últimas 24 horas)
+                      </h2>
 
-            {error && (
-              <p className="text-xs text-red-400 mt-2">Error: {error}</p>
+                      {metricsLoading && (
+                        <div className="text-xs text-slate-400">
+                          Cargando métricas…
+                        </div>
+                      )}
+
+                      {metricsError && (
+                        <div className="text-xs text-red-400">
+                          {metricsError}
+                        </div>
+                      )}
+
+                      {metrics && !metricsLoading && !metricsError && (
+                        <div className="space-y-6">
+                          {/* Cards principales */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+                              <p className="text-[11px] text-slate-400 mb-1">
+                                Peticiones totales
+                              </p>
+                              <p className="text-xl font-semibold">
+                                {metrics.totals.totalRequests.toLocaleString()}
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+                              <p className="text-[11px] text-slate-400 mb-1">
+                                Ataques bloqueados
+                              </p>
+                              <p className="text-xl font-semibold text-emerald-400">
+                                {metrics.totals.blockedRequests.toLocaleString()}
+                              </p>
+                              <p className="text-[11px] text-slate-400 mt-1">
+                                {(metrics.totals.totalRequests
+                                  ? (metrics.totals.blockedRequests /
+                                      metrics.totals.totalRequests) *
+                                    100
+                                  : 0
+                                ).toFixed(1)}
+                                % del tráfico
+                              </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+                              <p className="text-[11px] text-slate-400 mb-1">
+                                Tráfico bot estimado
+                              </p>
+                              <p className="text-xl font-semibold text-cyan-400">
+                                {metrics.totals.botRequests.toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* “Gráfico” de barras horizontales simple */}
+                          {metrics.hourly.length > 0 && (
+                            <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+                              <p className="text-[11px] text-slate-400 mb-3">
+                                Evolución por hora
+                              </p>
+                              <div className="space-y-2 max-h-64 overflow-y-auto">
+                                {metrics.hourly.map((h) => {
+                                  const total = h.totalRequests || 0;
+                                  const blocked = h.blockedRequests || 0;
+                                  const barWidth =
+                                    maxHourlyTotal > 0
+                                      ? Math.max(
+                                          (total / maxHourlyTotal) * 100,
+                                          5
+                                        )
+                                      : 0;
+                                  const blockedRatio =
+                                    total > 0
+                                      ? (blocked / total) * 100
+                                      : 0;
+
+                                  const label = new Date(
+                                    h.bucketStart
+                                  ).toLocaleTimeString("es-ES", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  });
+
+                                  return (
+                                    <div
+                                      key={h.bucketStart}
+                                      className="flex items-center gap-3"
+                                    >
+                                      <span className="w-14 text-[11px] text-slate-400">
+                                        {label}
+                                      </span>
+                                      <div className="flex-1 h-3 rounded-full bg-slate-800 overflow-hidden">
+                                        <div
+                                          className="h-full bg-slate-500/70 relative"
+                                          style={{ width: `${barWidth}%` }}
+                                        >
+                                          {blockedRatio > 0 && (
+                                            <div
+                                              className="absolute inset-y-0 right-0 bg-emerald-500/70"
+                                              style={{
+                                                width: `${Math.min(
+                                                  blockedRatio,
+                                                  100
+                                                )}%`,
+                                              }}
+                                            />
+                                          )}
+                                        </div>
+                                      </div>
+                                      <span className="w-24 text-right text-[11px] text-slate-300">
+                                        {total.toLocaleString()} req
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </section>
+                  </>
+                )}
+
+                {error && (
+                  <p className="text-xs text-red-400 mt-2">Error: {error}</p>
+                )}
+              </div>
             )}
-          </div>
+          </>
         )}
       </div>
     </div>
