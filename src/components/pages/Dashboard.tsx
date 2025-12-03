@@ -182,6 +182,85 @@ const Dashboard: React.FC = () => {
 
   const maxDomains = getMaxDomainsForPlan(account?.plan);
 
+
+
+const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
+const [manualRefreshing, setManualRefreshing] = useState(false);
+
+async function loadMetrics(domainId: string, opts?: { manual?: boolean }) {
+  const currentDomain = domains?.find((d) => d.id === domainId);
+
+  if (!currentDomain || currentDomain.dns_status !== "ok") {
+    setMetrics(null);
+    setMetricsError(null);
+    return;
+  }
+
+  setMetricsLoading(true);
+  setMetricsError(null);
+  if (opts?.manual) setManualRefreshing(true);
+
+  try {
+    const res = await fetch(
+      `${API_BASE}/domains/${encodeURIComponent(domainId)}/metrics/overview`,
+      { credentials: "include" }
+    );
+
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      setMetrics(null);
+      setMetricsError(
+        data.error || "No se han podido cargar las métricas"
+      );
+      return;
+    }
+
+    const totals = data.totals || {};
+    const totalChecks = Number(totals.totalRequests ?? 0);
+
+    const mapped: DomainMetrics = {
+      from: data.from,
+      to: data.to,
+      totalChecks,
+      uptimePercent:
+        totals.uptimePercent != null
+          ? Number(totals.uptimePercent)
+          : null,
+      lastStatusCode:
+        totals.lastStatusCode != null ? Number(totals.lastStatusCode) : null,
+      lastCheckedAt: totals.lastCheckedAt ?? null,
+      avgTtfbMs:
+        totals.avgTtfbMs != null
+          ? Math.round(Number(totals.avgTtfbMs))
+          : null,
+      p95TtfbMs:
+        totals.p95TtfbMs != null
+          ? Math.round(Number(totals.p95TtfbMs))
+          : null,
+      okChecks: Number(totals.allowedRequests ?? 0),
+      errorChecks: Number(totals.blockedRequests ?? 0),
+      timeoutErrors: Number(totals.timeoutErrors ?? 0),
+      networkErrors: Number(totals.networkErrors ?? 0),
+      http4xxErrors: Number(totals.http4xxErrors ?? 0),
+      http5xxErrors: Number(totals.http5xxErrors ?? 0),
+    };
+
+    setMetrics(mapped);
+    setLastRefreshAt(new Date().toISOString());
+  } catch (err: any) {
+    setMetrics(null);
+    setMetricsError(
+      err?.message || "Error de red al cargar las métricas"
+    );
+  } finally {
+    setMetricsLoading(false);
+    if (opts?.manual) setManualRefreshing(false);
+  }
+}
+
+
+
   // carga inicial dominios
   useEffect(() => {
     fetch(`${API_BASE}/domains`, { credentials: "include" })
@@ -218,11 +297,34 @@ const Dashboard: React.FC = () => {
   }, [domains, selectedDomainId]);
 
   // carga de métricas al cambiar dominio
-  useEffect(() => {
-  if (selectedDomainId && selectedDomain?.dns_status === "ok") {
-    fetchMetrics(selectedDomainId);
+  // Carga de métricas del dominio seleccionado (al entrar / cambiar dominio)
+useEffect(() => {
+  if (!selectedDomainId) {
+    setMetrics(null);
+    setMetricsError(null);
+    return;
   }
+
+  loadMetrics(selectedDomainId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [selectedDomainId, domains]);
+
+
+// Auto-refresh de métricas cada X segundos mientras estés en el dashboard
+useEffect(() => {
+  if (!selectedDomainId) return;
+
+  // premium: el CRON chequea cada 1 min, así que refrescamos cada 60 s
+  const intervalMs = 60_000;
+
+  const id = setInterval(() => {
+    loadMetrics(selectedDomainId);
+  }, intervalMs);
+
+  return () => clearInterval(id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [selectedDomainId]);
+
 
   
   async function handleManualRefresh() {
@@ -544,11 +646,11 @@ async function fetchMetrics(domainId: string) {
                     </p>
                   )}
                   <button
-                    onClick={handleManualRefresh}
-                    disabled={metricsLoading || !selectedDomain}
-                    className="text-[11px] px-2 py-1 rounded-md border border-slate-700 bg-slate-900/80 hover:border-cyan-500/70 hover:text-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {metricsLoading ? "Actualizando…" : "Actualizar"}
+                    onClick={() => loadMetrics(selectedDomain.id, { manual: true })}
+                    className="rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-100 border border-slate-600"
+                    disabled={manualRefreshing || metricsLoading}
+                    >
+                    {manualRefreshing || metricsLoading ? "Actualizando…" : "Actualizar"}
                   </button>
                 </div>
               </div>
