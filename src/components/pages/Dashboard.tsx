@@ -314,82 +314,83 @@ const Dashboard: React.FC = () => {
 
             {/* Lista de tarjetas de dominios (estado TXT) */}
             <div className="space-y-3 mt-2">
-              {domains.map((d) => {
-                const isPending = d.dns_status === "pending";
-                const isVerified = d.dns_status === "ok";
-                const justVerified = recentlyVerifiedId === d.id;
+  {domains
+    .filter((d) => d.id === selectedDomainId) // SOLO dominio seleccionado
+    .map((d) => {
+      const isPending = d.dns_status === "pending";
+      const isVerified = d.dns_status === "ok";
+      const justVerified = recentlyVerifiedId === d.id;
 
-                const baseClasses =
-                  "rounded-xl p-4 text-sm transition-all duration-500";
-                let colorClasses =
-                  "border border-slate-800 bg-slate-900/80"; // por defecto
+      const baseClasses =
+        "rounded-xl p-4 text-sm transition-all duration-500";
+      let colorClasses =
+        "border border-slate-800 bg-slate-900/80";
 
-                if (isPending) {
-                  colorClasses =
-                    "border border-amber-500/60 bg-amber-500/5";
-                }
+      if (isPending) {
+        colorClasses = "border border-amber-500/60 bg-amber-500/5";
+      }
 
-                if (isVerified) {
-                  colorClasses =
-                    "border border-emerald-500/40 bg-emerald-500/5";
-                }
+      if (isVerified) {
+        colorClasses = "border border-emerald-500/40 bg-emerald-500/5";
+      }
 
-                if (justVerified) {
-                  colorClasses =
-                    "border border-emerald-400 bg-emerald-500/15 shadow-[0_0_0_1px_rgba(16,185,129,0.6)] animate-pulse";
-                }
+      if (justVerified) {
+        colorClasses =
+          "border border-emerald-400 bg-emerald-500/15 shadow-[0_0_0_1px_rgba(16,185,129,0.6)] animate-pulse";
+      }
 
-                return (
-                  <div key={d.id} className={`${baseClasses} ${colorClasses}`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="font-medium">{d.hostname}</div>
-                      {isVerified && (
-                        <span className="text-[11px] rounded-full border border-emerald-500/60 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
-                          Verificado
-                        </span>
-                      )}
-                      {isPending && (
-                        <span className="text-[11px] rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-amber-300">
-                          Pendiente de verificación
-                        </span>
-                      )}
-                    </div>
+      return (
+        <div key={d.id} className={`${baseClasses} ${colorClasses}`}>
+          <div className="flex items-center justify-between mb-1">
+            <div className="font-medium">{d.hostname}</div>
+            {isVerified && (
+              <span className="text-[11px] rounded-full border border-emerald-500/60 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                Verificado
+              </span>
+            )}
+            {isPending && (
+              <span className="text-[11px] rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-amber-300">
+                Pendiente de verificación
+              </span>
+            )}
+          </div>
 
-                    {isPending && (
-                      <div className="mt-2 space-y-2">
-                        <p className="text-slate-300 text-xs">
-                          Añade este registro TXT en el DNS de tu dominio y
-                          después pulsa “Comprobar TXT”:
-                        </p>
-                        <code className="block text-[11px] bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
-                          Nombre: _zntinel.{d.hostname}
-                          <br />
-                          Valor: {d.verification_token}
-                        </code>
+          {isPending && (
+            <div className="mt-2 space-y-2">
+              <p className="text-slate-300 text-xs">
+                Añade este registro TXT en el DNS de tu dominio y después
+                pulsa “Comprobar TXT”:
+              </p>
+              <code className="block text-[11px] bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
+                Nombre: _zntinel.{d.hostname}
+                <br />
+                Valor: {d.verification_token}
+              </code>
 
-                        <button
-                          onClick={() => handleVerify(d)}
-                          disabled={verifyingId === d.id}
-                          className="mt-2 inline-flex items-center rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-3 py-1.5 text-xs font-medium text-slate-950"
-                        >
-                          {verifyingId === d.id
-                            ? "Comprobando TXT…"
-                            : "Comprobar TXT"}
-                        </button>
-                      </div>
-                    )}
-
-                    {isVerified && (
-                      <p className="mt-2 text-emerald-200 text-xs">
-                        {justVerified
-                          ? "Dominio verificado correctamente. Cargando métricas…"
-                          : "Dominio verificado. Las métricas del panel se basan en este dominio."}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
+              <button
+                onClick={() => handleVerify(d)}
+                disabled={verifyingId === d.id}
+                className="mt-2 inline-flex items-center rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-3 py-1.5 text-xs font-medium text-slate-950"
+              >
+                {verifyingId === d.id
+                  ? "Comprobando TXT…"
+                  : "Comprobar TXT"}
+              </button>
             </div>
+          )}
+
+          {isVerified && (
+            <p className="mt-2 text-emerald-200 text-xs">
+              {justVerified
+                ? "Dominio verificado correctamente. Cargando métricas…"
+                : "Dominio verificado. Las métricas del panel se basan en este dominio."}
+            </p>
+          )}
+        </div>
+      );
+    })}
+</div>
+
 
             {error && (
               <p className="text-xs text-red-400 mt-3">Error: {error}</p>
