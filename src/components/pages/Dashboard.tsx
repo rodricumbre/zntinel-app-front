@@ -78,62 +78,34 @@ const Dashboard: React.FC = () => {
   const maxDomains = getMaxDomainsForPlan(account?.plan);
 
   // Carga inicial de dominios
-  useEffect(() => {
-        fetch(
-      `${API_BASE}/domains/${encodeURIComponent(
-        selectedDomainId
-      )}/metrics/overview`,
-      {
-        credentials: "include",
-      }
-    )
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.success) {
-          setMetrics(null);
-          setMetricsError(
-            data.error || "No se han podido cargar las métricas"
-          );
-          return;
+  // Carga inicial de dominios
+useEffect(() => {
+  fetch(`${API_BASE}/domains`, { credentials: "include" })
+    .then((r) => r.json())
+    .then((data) => {
+      if (data.success) {
+        const list: Domain[] = data.domains || [];
+        setDomains(list);
+
+        if (list.length === 0) {
+          setIsOnboardingOpen(true);
+        } else {
+          // seleccionamos el primero por defecto si no hay seleccionado
+          setSelectedDomainId((prev) => prev ?? list[0].id);
         }
+      } else {
+        setError(data.error || "Error cargando dominios");
+        setDomains([]);
+        setIsOnboardingOpen(true);
+      }
+    })
+    .catch((err) => {
+      setError(String(err));
+      setDomains([]);
+      setIsOnboardingOpen(true);
+    });
+}, []);
 
-        const totals = data.totals || {};
-        const totalChecks = Number(totals.totalRequests ?? 0);
-
-        setMetrics({
-          from: data.from,
-          to: data.to,
-          totalChecks,
-          uptimePercent:
-            typeof totals.uptimePercent === "number"
-              ? totals.uptimePercent
-              : totals.uptimePercent != null
-              ? Number(totals.uptimePercent)
-              : null,
-          lastStatusCode:
-            typeof totals.lastStatusCode === "number"
-              ? totals.lastStatusCode
-              : totals.lastStatusCode != null
-              ? Number(totals.lastStatusCode)
-              : null,
-          lastCheckedAt: totals.lastCheckedAt ?? null,
-          avgTtfbMs:
-            totals.avgTtfbMs != null
-              ? Math.round(Number(totals.avgTtfbMs))
-              : null,
-          p95TtfbMs:
-            totals.p95TtfbMs != null
-              ? Math.round(Number(totals.p95TtfbMs))
-              : null,
-          okChecks: Number(totals.allowedRequests ?? 0),
-          errorChecks: Number(totals.blockedRequests ?? 0),
-          timeoutErrors: Number(totals.timeoutErrors ?? 0),
-          networkErrors: Number(totals.networkErrors ?? 0),
-          http4xxErrors: Number(totals.http4xxErrors ?? 0),
-          http5xxErrors: Number(totals.http5xxErrors ?? 0),
-        });
-      })
-  }, []);
 
   // cuando cambian los dominios y no hay seleccionado, elegir uno
   useEffect(() => {
@@ -144,92 +116,88 @@ const Dashboard: React.FC = () => {
   }, [domains, selectedDomainId]);
 
   // Carga de métricas del dominio seleccionado
-  useEffect(() => {
-    if (!selectedDomainId) {
-      setMetrics(null);
-      setMetricsError(null);
-      return;
-    }
-
-    const currentDomain = domains?.find((d) => d.id === selectedDomainId);
-    // si el dominio aún está pendiente, no pedimos métricas
-    if (!currentDomain || currentDomain.dns_status !== "ok") {
-      setMetrics(null);
-      setMetricsError(null);
-      return;
-    }
-
-    setMetricsLoading(true);
+  // Carga de métricas del dominio seleccionado
+useEffect(() => {
+  if (!selectedDomainId) {
+    setMetrics(null);
     setMetricsError(null);
+    return;
+  }
 
-    fetch(
-      `${API_BASE}/domains/${encodeURIComponent(
-        selectedDomainId
-      )}/metrics/overview`,
-      {
-        credentials: "include",
-      }
-    )
-      .then((r) => r.json())
-          fetch(
-      `${API_BASE}/domains/${encodeURIComponent(
-        selectedDomainId
-      )}/metrics/overview`,
-      {
-        credentials: "include",
-      }
-    )
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data.success) {
-          setMetrics(null);
-          setMetricsError(
-            data.error || "No se han podido cargar las métricas"
-          );
-          return;
-        }
+  const currentDomain = domains?.find((d) => d.id === selectedDomainId);
+  // si el dominio aún está pendiente, no pedimos métricas
+  if (!currentDomain || currentDomain.dns_status !== "ok") {
+    setMetrics(null);
+    setMetricsError(null);
+    return;
+  }
 
-        // La API actual devuelve: { success, from, to, totals, hourly }
-        const totals = data.totals || {};
-        const mapped: DomainMetrics = {
-          from: data.from,
-          to: data.to,
-          totalChecks:
-            typeof totals.totalRequests === "number"
-              ? totals.totalRequests
-              : 0,
-          uptimePercent:
-            typeof totals.uptimePercent === "number"
-              ? totals.uptimePercent
-              : null,
-          lastStatusCode:
-            typeof totals.lastStatusCode === "number"
-              ? totals.lastStatusCode
-              : null,
-          lastCheckedAt: totals.lastCheckedAt || null,
-          avgTtfbMs:
-            typeof totals.avgTtfbMs === "number"
-              ? Math.round(totals.avgTtfbMs)
-              : null,
-          p95TtfbMs:
-            typeof totals.p95TtfbMs === "number"
-              ? totals.p95TtfbMs
-              : null,
-        };
+  setMetricsLoading(true);
+  setMetricsError(null);
 
-        setMetrics(mapped);
-      })
-      .catch((err) => {
+  fetch(
+    `${API_BASE}/domains/${encodeURIComponent(
+      selectedDomainId
+    )}/metrics/overview`,
+    {
+      credentials: "include",
+    }
+  )
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.success) {
         setMetrics(null);
         setMetricsError(
-          err?.message || "Error de red al cargar las métricas"
+          data.error || "No se han podido cargar las métricas"
         );
-      })
-      .finally(() => {
-        setMetricsLoading(false);
-      });
+        return;
+      }
 
-  }, [selectedDomainId, domains]);
+      const totals = data.totals || {};
+      const totalChecks = Number(totals.totalRequests ?? 0);
+
+      const mapped: DomainMetrics = {
+        from: data.from,
+        to: data.to,
+        totalChecks,
+        uptimePercent:
+          totals.uptimePercent != null
+            ? Number(totals.uptimePercent)
+            : null,
+        lastStatusCode:
+          totals.lastStatusCode != null
+            ? Number(totals.lastStatusCode)
+            : null,
+        lastCheckedAt: totals.lastCheckedAt ?? null,
+        avgTtfbMs:
+          totals.avgTtfbMs != null
+            ? Math.round(Number(totals.avgTtfbMs))
+            : null,
+        p95TtfbMs:
+          totals.p95TtfbMs != null
+            ? Math.round(Number(totals.p95TtfbMs))
+            : null,
+        okChecks: Number(totals.allowedRequests ?? 0),
+        errorChecks: Number(totals.blockedRequests ?? 0),
+        timeoutErrors: Number(totals.timeoutErrors ?? 0),
+        networkErrors: Number(totals.networkErrors ?? 0),
+        http4xxErrors: Number(totals.http4xxErrors ?? 0),
+        http5xxErrors: Number(totals.http5xxErrors ?? 0),
+      };
+
+      setMetrics(mapped);
+    })
+    .catch((err) => {
+      setMetrics(null);
+      setMetricsError(
+        err?.message || "Error de red al cargar las métricas"
+      );
+    })
+    .finally(() => {
+      setMetricsLoading(false);
+    });
+}, [selectedDomainId, domains]);
+
 
   async function handleVerify(domain: Domain) {
     if (verifyingId) return;
