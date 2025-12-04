@@ -13,6 +13,7 @@ type Domain = {
 type HourlyPoint = {
   bucketStart: string;
   uptimePercent: number | null;
+  avgTtfbMs?: number | null;
 };
 
 type RiskLevel = "low" | "medium" | "high" | "critical";
@@ -202,12 +203,27 @@ function mapApiMetrics(data: any): DomainMetrics {
 const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
   if (!hourly || hourly.length === 0) return null;
 
-  const points = hourly.map((h, idx) => {
-    const x =
-      hourly.length === 1 ? 0 : (idx / (hourly.length - 1)) * 100;
+  // Solo puntos con TTFB válido
+  const valid = hourly.filter(
+    (h) => typeof h.avgTtfbMs === "number" && h.avgTtfbMs !== null
+  ) as (HourlyPoint & { avgTtfbMs: number })[];
 
-    const uptime = h.uptimePercent ?? 100;
-    const y = 100 - Math.max(0, Math.min(uptime, 100));
+  if (valid.length === 0) return null;
+
+  // Calculamos min y max TTFB para escalar 0–100 en el eje Y
+  const values = valid.map((h) => h.avgTtfbMs);
+  const minTtfb = Math.min(...values);
+  const maxTtfb = Math.max(...values);
+
+  const range = maxTtfb - minTtfb || 1; // evitar división por 0
+
+  const points = valid.map((h, idx) => {
+    const x =
+      valid.length === 1 ? 0 : (idx / (valid.length - 1)) * 100;
+
+    // Normalizamos: min -> 100 (arriba, mejor), max -> 0 (abajo, peor)
+    const normalized = (h.avgTtfbMs - minTtfb) / range; // 0..1
+    const y = 100 - normalized * 100;
 
     return `${x},${y}`;
   });
@@ -215,7 +231,7 @@ const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
   return (
     <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-[11px] text-slate-400">Uptime últimas 24 h</p>
+        <p className="text-[11px] text-slate-400">TTFB últimas 24 h</p>
         <p className="text-[10px] text-slate-500">
           Cada punto representa 1 hora
         </p>
@@ -240,9 +256,15 @@ const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
           points={points.join(" ")}
         />
       </svg>
+      {/* Opcional: rango de referencia abajo */}
+      <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+        <span>{Math.round(minTtfb)} ms (mejor)</span>
+        <span>{Math.round(maxTtfb)} ms (peor)</span>
+      </div>
     </div>
   );
 };
+
 
 // Helpers visuales para riesgo / estados
 function getRiskLabel(risk: RiskLevel | null): string {
