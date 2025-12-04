@@ -16,6 +16,8 @@ import AccountUsage from "@/components/pages/AccountUsage";
 import Members from "@/components/pages/Members";
 import Metrics from "@/components/pages/Metrics";
 import Logs from "@/components/pages/Logs";
+import SettingsPage from "@/components/pages/SettingsPage";
+
 
 
 const PrivateRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
@@ -105,6 +107,17 @@ const App: React.FC = () => {
             <PrivateRoute>
               <AppLayout>
                 <Logs />
+              </AppLayout>
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            <PrivateRoute>
+              <AppLayout>
+                <SettingsPage />
               </AppLayout>
             </PrivateRoute>
           }

@@ -664,7 +664,9 @@ const Dashboard: React.FC = () => {
             </div>
 
             {error && (
-              <p className="text-xs text-red-400 mt-3">Error: {error}</p>
+              <p className="text-xs text-red-400 mt-3">Error: {error}
+              No se ha podido verficar el registro TXT. Prueba de nuevo en 15s.
+            </p>
             )}
 
             {/* OVERVIEW */}
