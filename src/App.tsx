@@ -18,7 +18,9 @@ import Metrics from "@/components/pages/Metrics";
 import Logs from "@/components/pages/Logs";
 import SettingsPage from "@/components/pages/SettingsPage";
 
-
+// NUEVOS
+import Register from "@/components/pages/Register";
+import AcceptInvite from "@/components/pages/AcceptInvite";
 
 const PrivateRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -42,8 +44,10 @@ const App: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* pública */}
+        {/* públicas */}
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/accept-invite" element={<AcceptInvite />} />
 
         {/* privadas */}
         <Route
@@ -123,6 +127,7 @@ const App: React.FC = () => {
           }
         />
 
+        {/* redirecciones */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

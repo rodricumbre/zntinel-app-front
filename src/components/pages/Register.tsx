@@ -1,7 +1,6 @@
-// src/components/pages/Login.tsx
+// src/components/pages/Register.tsx
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "@/lib/auth";
 import { useLanguage } from "@/lib/language";
 
 const API_BASE_URL =
@@ -11,54 +10,61 @@ type Lang = "es" | "en";
 
 const copy = {
   es: {
-    title: "Inicia sesión",
+    title: "Crea tu cuenta",
     subtitle:
-      "Controla tu WAF gestionado, bloquea bots y revisa métricas de seguridad en tiempo real.",
+      "Configura tu panel de Zntinel, conecta tu dominio y empieza a proteger tu web.",
+    firstNameLabel: "Nombre",
+    lastNameLabel: "Apellido",
     emailLabel: "Email",
     passwordLabel: "Password",
+    firstNamePlaceholder: "Tu nombre",
+    lastNamePlaceholder: "Tu apellido",
     emailPlaceholder: "tucorreo@empresa.com",
     passwordPlaceholder: "••••••••",
-    button: "Entrar",
-    buttonLoading: "Entrando...",
-    errorEmpty: "Introduce email y contraseña.",
-    errorGeneric: "Credenciales inválidas o error de servidor",
-    footerLeft: "Control Center · v1.0",
-    footerRight: "TLS · WAF · Bots · Logs",
+    button: "Crear cuenta",
+    buttonLoading: "Creando cuenta...",
+    errorEmpty: "Rellena todos los campos.",
+    errorGeneric:
+      "No se ha podido crear la cuenta. Revisa los datos o inténtalo más tarde.",
   },
   en: {
-    title: "Log in",
+    title: "Create your account",
     subtitle:
-      "Control your managed WAF, block bots and review security metrics in real time.",
+      "Set up your Zntinel Control Center, connect your domain and start protecting your site.",
+    firstNameLabel: "First name",
+    lastNameLabel: "Last name",
     emailLabel: "Email",
     passwordLabel: "Password",
+    firstNamePlaceholder: "Your first name",
+    lastNamePlaceholder: "Your last name",
     emailPlaceholder: "you@company.com",
     passwordPlaceholder: "••••••••",
-    button: "Log in",
-    buttonLoading: "Logging in...",
-    errorEmpty: "Enter email and password.",
-    errorGeneric: "Invalid credentials or server error",
-    footerLeft: "Control Center · v1.0",
-    footerRight: "TLS · WAF · Bots · Logs",
+    button: "Create account",
+    buttonLoading: "Creating account...",
+    errorEmpty: "Fill in all fields.",
+    errorGeneric:
+      "Could not create account. Check your data or try again later.",
   },
 } as const;
 
-const Login: React.FC = () => {
+const Register: React.FC = () => {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { lang, setLang } = useLanguage();
   const t = copy[lang];
 
-  const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const params = new URLSearchParams(location.search);
-  const inviteToken = params.get("inviteToken") || null;
+  const inviteToken = params.get("inviteToken");
 
-  // Si viene de invitación, pre-rellenamos el email
   useEffect(() => {
     const inviteEmail = params.get("email");
     if (inviteEmail) {
@@ -68,40 +74,84 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
 
+    const sanitizedFirstName = firstName.trim();
+    const sanitizedLastName = lastName.trim();
     const sanitizedEmail = email.trim().toLowerCase();
     const sanitizedPassword = password.trim();
 
-    if (!sanitizedEmail || !sanitizedPassword) {
+    if (
+      !sanitizedFirstName ||
+      !sanitizedLastName ||
+      !sanitizedEmail ||
+      !sanitizedPassword
+    ) {
       setError(t.errorEmpty);
       return;
     }
 
     setLoading(true);
-    setError(null);
 
     try {
-      // Login normal
-      await login(sanitizedEmail, sanitizedPassword);
-
-      // Si viene de invitación, aceptamos la invitación para esa org
       if (inviteToken) {
-        try {
-          await fetch(`${API_BASE_URL}/auth/accept-invite-existing`, {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ token: inviteToken }),
-          });
-          // aunque falle, no bloqueamos el acceso al panel
-        } catch (e) {
-          console.error("Error aceptando invitación existente", e);
-        }
-      }
+        // Registro a través de invitación
+        const res = await fetch(`${API_BASE_URL}/auth/accept-invite`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            token: inviteToken,
+            password: sanitizedPassword,
+            firstName: sanitizedFirstName,
+            lastName: sanitizedLastName,
+          }),
+        });
 
-      navigate("/dashboard");
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          setError(
+            data.error ||
+              "No se ha podido aceptar la invitación. Inténtalo de nuevo."
+          );
+          setLoading(false);
+          return;
+        }
+
+        navigate("/dashboard");
+      } else {
+        // Registro normal (sin invitación)
+        const res = await fetch(`${API_BASE_URL}/auth/register`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: sanitizedEmail,
+            password: sanitizedPassword,
+            firstName: sanitizedFirstName,
+            lastName: sanitizedLastName,
+            // companyName opcional: el backend ya tiene "My Company" por defecto
+          }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          setError(
+            data.error ||
+              "No se ha podido crear la cuenta. Inténtalo de nuevo."
+          );
+          setLoading(false);
+          return;
+        }
+
+        navigate("/dashboard");
+      }
     } catch (err) {
       console.error(err);
       setError(t.errorGeneric);
@@ -161,6 +211,32 @@ const Login: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-400">
+                {t.firstNameLabel}
+              </label>
+              <input
+                type="text"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none ring-0 transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/60"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder={t.firstNamePlaceholder}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-400">
+                {t.lastNameLabel}
+              </label>
+              <input
+                type="text"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none ring-0 transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/60"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder={t.lastNamePlaceholder}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-slate-400">
                 {t.emailLabel}
               </label>
               <input
@@ -182,7 +258,7 @@ const Login: React.FC = () => {
                 className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none ring-0 transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/60"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
+                autoComplete="new-password"
                 placeholder={t.passwordPlaceholder}
               />
             </div>
@@ -202,10 +278,9 @@ const Login: React.FC = () => {
             </button>
           </form>
 
-          {/* mini texto de confianza */}
           <div className="mt-4 flex items-center justify-between text-[10px] text-slate-500">
-            <span>{t.footerLeft}</span>
-            <span className="text-slate-500">{t.footerRight}</span>
+            <span>Control Center · v1.0</span>
+            <span className="text-slate-500">TLS · WAF · Bots · Logs</span>
           </div>
         </div>
       </div>
@@ -213,4 +288,4 @@ const Login: React.FC = () => {
   );
 };
 
-export default Login;
+export default Register;
