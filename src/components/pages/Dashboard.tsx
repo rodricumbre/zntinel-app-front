@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { DomainOnboardingModal } from "@/components/domains/DomainOnboardingModal";
 import { useAuth } from "@/lib/auth";
+import PageCard from "@/components/layout/PageCard";
 
 type Domain = {
   id: string;
@@ -53,7 +54,6 @@ type DomainMetrics = {
   http5xxErrors: number;
   hourly: HourlyPoint[];
 
-  // --- NUEVO: capa de ciberseguridad / dominio ---
   securityScore: number | null;
   riskLevel: RiskLevel | null;
   criticalIssues: number;
@@ -110,8 +110,7 @@ function mapApiMetrics(data: any): DomainMetrics {
     const total = Number(h.totalRequests ?? h.total_requests ?? 0) || 0;
     const blocked = Number(h.blockedRequests ?? h.blocked_requests ?? 0) || 0;
 
-    const uptimePercent =
-      total > 0 ? ((total - blocked) / total) * 100 : null;
+    const uptimePercent = total > 0 ? ((total - blocked) / total) * 100 : null;
 
     return {
       bucketStart: h.bucketStart ?? h.bucket_start,
@@ -119,15 +118,13 @@ function mapApiMetrics(data: any): DomainMetrics {
     };
   });
 
-  // NUEVO: intentar leer datos de seguridad/email si el backend ya los devuelve.
   const security = data?.security || data?.overview?.security || {};
   const emailSec =
     data?.emailSecurity || data?.email || data?.domainSecurity || {};
   const cert = data?.certificate || {};
   const issues: IssueSummary[] = (data?.topIssues || []).map((i: any) => ({
     id: String(i.id ?? i.code ?? Math.random().toString(36).slice(2)),
-    severity: (i.severity ||
-      "medium") as IssueSeverity,
+    severity: (i.severity || "medium") as IssueSeverity,
     category: (i.category || "other") as IssueSummary["category"],
     title: String(i.title || i.message || "Issue detectado"),
     detectedAt: String(i.detectedAt || i.detected_at || data.to),
@@ -138,22 +135,14 @@ function mapApiMetrics(data: any): DomainMetrics {
     to: data.to,
     totalChecks,
     uptimePercent:
-      totals.uptimePercent != null
-        ? Number(totals.uptimePercent)
-        : null,
+      totals.uptimePercent != null ? Number(totals.uptimePercent) : null,
     lastStatusCode:
-      totals.lastStatusCode != null
-        ? Number(totals.lastStatusCode)
-        : null,
+      totals.lastStatusCode != null ? Number(totals.lastStatusCode) : null,
     lastCheckedAt: totals.lastCheckedAt ?? null,
     avgTtfbMs:
-      totals.avgTtfbMs != null
-        ? Math.round(Number(totals.avgTtfbMs))
-        : null,
+      totals.avgTtfbMs != null ? Math.round(Number(totals.avgTtfbMs)) : null,
     p95TtfbMs:
-      totals.p95TtfbMs != null
-        ? Math.round(Number(totals.p95TtfbMs))
-        : null,
+      totals.p95TtfbMs != null ? Math.round(Number(totals.p95TtfbMs)) : null,
     okChecks: Number(totals.allowedRequests ?? 0),
     errorChecks: Number(totals.blockedRequests ?? 0),
     timeoutErrors: Number(totals.timeoutErrors ?? 0),
@@ -162,38 +151,21 @@ function mapApiMetrics(data: any): DomainMetrics {
     http5xxErrors: Number(totals.http5xxErrors ?? 0),
     hourly,
 
-    // --- NUEVO: seguridad ---
-    securityScore:
-      security.score != null ? Number(security.score) : null,
+    securityScore: security.score != null ? Number(security.score) : null,
     riskLevel: security.riskLevel || null,
     criticalIssues: Number(security.criticalIssues ?? 0),
     warningIssues: Number(security.warningIssues ?? 0),
 
-    spfStatus:
-      emailSec.spfStatus ||
-      emailSec.spf ||
-      "unknown",
-    dkimStatus:
-      emailSec.dkimStatus ||
-      emailSec.dkim ||
-      "unknown",
-    dmarcPolicy:
-      emailSec.dmarcPolicy ||
-      emailSec.dmarc ||
-      "unknown",
-    dnssecStatus:
-      emailSec.dnssecStatus ||
-      emailSec.dnssec ||
-      "unknown",
+    spfStatus: emailSec.spfStatus || emailSec.spf || "unknown",
+    dkimStatus: emailSec.dkimStatus || emailSec.dkim || "unknown",
+    dmarcPolicy: emailSec.dmarcPolicy || emailSec.dmarc || "unknown",
+    dnssecStatus: emailSec.dnssecStatus || emailSec.dnssec || "unknown",
 
     certDaysToExpire:
-      cert.daysToExpire != null
-        ? Number(cert.daysToExpire)
-        : null,
+      cert.daysToExpire != null ? Number(cert.daysToExpire) : null,
     hasExpiringCertSoon: Boolean(
       cert.hasExpiringCertSoon ??
-        (cert.daysToExpire != null &&
-          Number(cert.daysToExpire) <= 30)
+        (cert.daysToExpire != null && Number(cert.daysToExpire) <= 30)
     ),
 
     topIssues: issues,
@@ -204,12 +176,10 @@ const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
   if (!hourly || hourly.length === 0) return null;
 
   const points = hourly.map((h, idx) => {
-    const x =
-      hourly.length === 1 ? 0 : (idx / (hourly.length - 1)) * 100;
-
-    const uptime = h.avgTtfbMs ?? 100;
-    const y = 100 - Math.max(0, Math.min(uptime, 100));
-
+    const x = hourly.length === 1 ? 0 : (idx / (hourly.length - 1)) * 100;
+    const uptime = h.uptimePercent ?? 100;
+    const safe = Math.max(0, Math.min(uptime, 100));
+    const y = 100 - safe;
     return `${x},${y}`;
   });
 
@@ -245,7 +215,6 @@ const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
   );
 };
 
-// Helpers visuales para riesgo / estados
 function getRiskLabel(risk: RiskLevel | null): string {
   if (!risk) return "Sin evaluar";
   if (risk === "low") return "Riesgo bajo";
@@ -255,8 +224,7 @@ function getRiskLabel(risk: RiskLevel | null): string {
 }
 
 function getRiskBadgeClasses(risk: RiskLevel | null): string {
-  if (!risk)
-    return "border-slate-600 bg-slate-900 text-slate-200";
+  if (!risk) return "border-slate-600 bg-slate-900 text-slate-200";
   if (risk === "low")
     return "border-emerald-500/60 bg-emerald-500/10 text-emerald-300";
   if (risk === "medium")
@@ -289,9 +257,7 @@ const Dashboard: React.FC = () => {
   const [recentlyVerifiedId, setRecentlyVerifiedId] =
     useState<string | null>(null);
 
-  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(
-    null
-  );
+  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
 
   const [metrics, setMetrics] = useState<DomainMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
@@ -301,7 +267,7 @@ const Dashboard: React.FC = () => {
 
   const maxDomains = getMaxDomainsForPlan(account?.plan);
 
-  // --------- Carga inicial dominios ----------
+  // Carga dominios
   useEffect(() => {
     fetch(`${API_BASE}/domains`, { credentials: "include" })
       .then((r) => r.json())
@@ -328,7 +294,7 @@ const Dashboard: React.FC = () => {
       });
   }, []);
 
-  // elegir dominio por defecto si aún no hay
+  // Dominio por defecto
   useEffect(() => {
     if (!domains || domains.length === 0) return;
     if (!selectedDomainId) {
@@ -336,7 +302,6 @@ const Dashboard: React.FC = () => {
     }
   }, [domains, selectedDomainId]);
 
-  // --------- Refresco de overview (GET + opcional POST health-check-now) ----------
   async function refreshDomainOverview(
     domainId: string,
     opts?: { manual?: boolean; triggerCheck?: boolean }
@@ -357,7 +322,6 @@ const Dashboard: React.FC = () => {
       setMetricsError(null);
       if (isManual) setManualRefreshing(true);
 
-      // 1) Si es manual → hacer health-check-now contra la web del cliente
       if (triggerCheck) {
         await fetch(
           `${API_BASE}/domains/${encodeURIComponent(
@@ -374,7 +338,6 @@ const Dashboard: React.FC = () => {
         });
       }
 
-      // 2) Leer overview (últimas 24h) desde Supabase
       const res = await fetch(getMetricsUrl(domainId), {
         credentials: "include",
       });
@@ -405,7 +368,7 @@ const Dashboard: React.FC = () => {
     }
   }
 
-  // Carga de métricas al cambiar de dominio (solo GET; no toca la web)
+  // Métricas al cambiar dominio
   useEffect(() => {
     if (!selectedDomainId || !domains) {
       setMetrics(null);
@@ -427,7 +390,7 @@ const Dashboard: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDomainId, domains]);
 
-  // Auto-refresh de métricas cada 60 s (solo GET; el CRON es quien mete checks)
+  // Auto refresh cada 60 s
   useEffect(() => {
     if (!selectedDomainId) return;
 
@@ -444,7 +407,6 @@ const Dashboard: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDomainId]);
 
-  // --------- Verificación de dominio ----------
   async function handleVerify(domain: Domain) {
     if (verifyingId) return;
     setVerifyingId(domain.id);
@@ -492,9 +454,14 @@ const Dashboard: React.FC = () => {
 
   if (domains === null) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
-        Cargando tu panel de Zntinel…
-      </div>
+      <PageCard
+        title="Cargando tu panel de Zntinel…"
+        subtitle="Recuperando tus dominios y estado de seguridad."
+      >
+        <div className="h-24 flex items-center justify-center text-sm text-slate-400">
+          Cargando…
+        </div>
+      </PageCard>
     );
   }
 
@@ -502,14 +469,12 @@ const Dashboard: React.FC = () => {
   const selectedDomain =
     domains.find((d) => d.id === selectedDomainId) || null;
 
-  const currentRiskLevel: RiskLevel | null =
-    metrics?.riskLevel ?? null;
-
+  const currentRiskLevel: RiskLevel | null = metrics?.riskLevel ?? null;
   const currentSecurityScore =
     metrics?.securityScore != null ? metrics.securityScore : null;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 px-6 py-8">
+    <>
       <DomainOnboardingModal
         open={isOnboardingOpen}
         maxDomains={maxDomains}
@@ -527,30 +492,35 @@ const Dashboard: React.FC = () => {
         }}
       />
 
-      <div className="max-w-5xl mx-auto">
+      <PageCard
+        title="Resumen de seguridad del dominio"
+        subtitle="Selecciona un dominio, verifica el registro TXT y revisa su salud, disponibilidad y superficie de ataque."
+      >
         {!hasAnyDomain ? (
-          <div className="mt-16 rounded-2xl border border-slate-800 bg-slate-900/80 p-8 text-center">
-            <h1 className="text-xl font-semibold mb-2">
+          <div className="mt-4 text-center">
+            <h2 className="text-sm font-semibold mb-2 text-slate-100">
               Añade tu dominio para comenzar
-            </h1>
-            <p className="text-sm text-slate-400 mb-6">
-              Antes de ver métricas o configurar reglas, conecta al menos
-              un dominio a Zntinel.
+            </h2>
+            <p className="text-xs text-slate-400 mb-4">
+              Antes de ver métricas o configurar reglas, conecta al menos un
+              dominio a Zntinel.
             </p>
             <button
               onClick={() => setIsOnboardingOpen(true)}
-              className="rounded-lg bg-cyan-500 hover:bg-cyan-400 px-4 py-2 text-sm font-medium text-slate-950"
+              className="rounded-lg bg-cyan-500 hover:bg-cyan-400 px-4 py-2 text-xs font-medium text-slate-950"
             >
               Añadir dominio ahora
             </button>
             {error && (
-              <p className="mt-4 text-xs text-red-400">Error: {error}</p>
+              <p className="mt-4 text-[11px] text-red-400">
+                Error: {error}
+              </p>
             )}
           </div>
         ) : (
           <>
             {/* pestañas dominios */}
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 mt-1">
               <div className="flex items-center gap-2 overflow-x-auto">
                 {domains.map((d) => {
                   const isActive = d.id === selectedDomainId;
@@ -559,10 +529,10 @@ const Dashboard: React.FC = () => {
                       key={d.id}
                       onClick={() => setSelectedDomainId(d.id)}
                       className={[
-                        "px-3 py-1.5 rounded-full text-xs font-medium border transition-colors whitespace-nowrap",
+                        "px-3 py-1.5 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap",
                         isActive
-                          ? "bg-slate-100 text-slate-900 border-slate-100"
-                          : "bg-slate-900/80 text-slate-200 border-slate-700 hover:border-cyan-500/60",
+                          ? "bg-cyan-400 text-slate-950 border-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.4)]"
+                          : "bg-slate-950/80 text-slate-200 border-slate-700 hover:border-cyan-500/60",
                       ].join(" ")}
                     >
                       {d.hostname}
@@ -574,7 +544,7 @@ const Dashboard: React.FC = () => {
               {domains.length < maxDomains && (
                 <button
                   onClick={() => setIsOnboardingOpen(true)}
-                  className="rounded-lg bg-cyan-500 hover:bg-cyan-400 px-3 py-1.5 text-xs font-medium text-slate-950"
+                  className="rounded-lg bg-slate-900 hover:bg-slate-800 px-3 py-1.5 text-[11px] font-medium text-slate-100 border border-slate-700"
                 >
                   Añadir dominio
                 </button>
@@ -582,7 +552,7 @@ const Dashboard: React.FC = () => {
             </div>
 
             {/* tarjeta verificación */}
-            <div className="space-y-3 mt-2">
+            <div className="space-y-3">
               {domains
                 .filter((d) => d.id === selectedDomainId)
                 .map((d) => {
@@ -591,9 +561,9 @@ const Dashboard: React.FC = () => {
                   const justVerified = recentlyVerifiedId === d.id;
 
                   const baseClasses =
-                    "rounded-xl p-4 text-sm transition-all duration-500";
+                    "rounded-xl p-4 text-xs transition-all duration-500";
                   let colorClasses =
-                    "border border-slate-800 bg-slate-900/80";
+                    "border border-slate-800 bg-slate-950/80";
 
                   if (isPending) {
                     colorClasses =
@@ -609,19 +579,18 @@ const Dashboard: React.FC = () => {
                   }
 
                   return (
-                    <div
-                      key={d.id}
-                      className={`${baseClasses} ${colorClasses}`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="font-medium">{d.hostname}</div>
+                    <div key={d.id} className={`${baseClasses} ${colorClasses}`}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="font-medium text-slate-100 text-sm">
+                          {d.hostname}
+                        </div>
                         {isVerified && (
-                          <span className="text-[11px] rounded-full border border-emerald-500/60 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                          <span className="text-[10px] rounded-full border border-emerald-500/60 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
                             Verificado
                           </span>
                         )}
                         {isPending && (
-                          <span className="text-[11px] rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-amber-300">
+                          <span className="text-[10px] rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-amber-300">
                             Pendiente de verificación
                           </span>
                         )}
@@ -629,9 +598,9 @@ const Dashboard: React.FC = () => {
 
                       {isPending && (
                         <div className="mt-2 space-y-2">
-                          <p className="text-slate-300 text-xs">
-                            Añade este registro TXT en el DNS de tu dominio
-                            y después pulsa “Comprobar TXT”:
+                          <p className="text-slate-300 text-[11px]">
+                            Añade este registro TXT en el DNS de tu dominio y
+                            después pulsa “Comprobar TXT”:
                           </p>
                           <code className="block text-[11px] bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
                             Nombre: _zntinel.{d.hostname}
@@ -642,7 +611,7 @@ const Dashboard: React.FC = () => {
                           <button
                             onClick={() => handleVerify(d)}
                             disabled={verifyingId === d.id}
-                            className="mt-2 inline-flex items-center rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-3 py-1.5 text-xs font-medium text-slate-950"
+                            className="mt-2 inline-flex items-center rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-3 py-1.5 text-[11px] font-medium text-slate-950"
                           >
                             {verifyingId === d.id
                               ? "Comprobando TXT…"
@@ -652,7 +621,7 @@ const Dashboard: React.FC = () => {
                       )}
 
                       {isVerified && (
-                        <p className="mt-2 text-emerald-200 text-xs">
+                        <p className="mt-2 text-emerald-200 text-[11px]">
                           {justVerified
                             ? "Dominio verificado correctamente. Cargando métricas…"
                             : "Dominio verificado. Las métricas del panel se basan en este dominio."}
@@ -664,22 +633,22 @@ const Dashboard: React.FC = () => {
             </div>
 
             {error && (
-              <p className="text-xs text-red-400 mt-3">Error: {error}
-              No se ha podido verficar el registro TXT. Prueba de nuevo en 15s.
-            </p>
+              <p className="text-[11px] text-red-400 mt-3">
+                Error: {error}. No se ha podido verificar el registro TXT. Prueba
+                de nuevo en 15s.
+              </p>
             )}
 
             {/* OVERVIEW */}
-            <div className="mt-8">
+            <div className="mt-6">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-slate-200">
+                <h2 className="text-sm font-semibold text-slate-100">
                   Overview del dominio seleccionado
                 </h2>
                 <div className="flex items-center gap-3">
                   {metrics && metrics.lastCheckedAt && (
-                    <p className="text-[11px] text-slate-500">
-                      Último check:{" "}
-                      {formatDateTime(metrics.lastCheckedAt)}
+                    <p className="text-[10px] text-slate-500">
+                      Último check: {formatDateTime(metrics.lastCheckedAt)}
                     </p>
                   )}
                   {lastUpdatedAt && (
@@ -696,7 +665,7 @@ const Dashboard: React.FC = () => {
                         triggerCheck: true,
                       })
                     }
-                    className="rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs font-medium text-slate-100 border border-slate-600"
+                    className="rounded-lg bg-slate-900 hover:bg-slate-800 px-3 py-1.5 text-[11px] font-medium text-slate-100 border border-slate-700"
                     disabled={manualRefreshing || metricsLoading}
                   >
                     {manualRefreshing || metricsLoading
@@ -707,23 +676,23 @@ const Dashboard: React.FC = () => {
               </div>
 
               {!selectedDomain ? (
-                <p className="text-xs text-slate-500">
+                <p className="text-[11px] text-slate-500">
                   Selecciona un dominio para ver sus métricas.
                 </p>
               ) : selectedDomain.dns_status !== "ok" ? (
-                <p className="text-xs text-slate-500">
+                <p className="text-[11px] text-slate-500">
                   Verifica el dominio para empezar a recoger métricas.
                 </p>
               ) : (
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
                   {metricsLoading && !metrics && (
-                    <p className="text-xs text-slate-400">
+                    <p className="text-[11px] text-slate-400">
                       Cargando métricas de {selectedDomain.hostname}…
                     </p>
                   )}
 
                   {metricsError && (
-                    <p className="text-xs text-red-400">
+                    <p className="text-[11px] text-red-400">
                       Error al cargar métricas: {metricsError}
                     </p>
                   )}
@@ -739,7 +708,7 @@ const Dashboard: React.FC = () => {
                             </p>
                             <div className="flex items-center gap-3">
                               <div className="flex items-baseline gap-2">
-                                <span className="text-xs text-slate-400">
+                                <span className="text-[11px] text-slate-400">
                                   Seguridad:
                                 </span>
                                 <span className="text-sm font-semibold">
@@ -775,9 +744,8 @@ const Dashboard: React.FC = () => {
                           </div>
                           <div className="text-[11px] text-slate-400 space-y-1">
                             <p>
-                              Ventana analizada:{" "}
-                              {formatDateTime(metrics.from)} –{" "}
-                              {formatDateTime(metrics.to)}
+                              Ventana analizada: {formatDateTime(metrics.from)}{" "}
+                              – {formatDateTime(metrics.to)}
                             </p>
                             {metrics.certDaysToExpire != null && (
                               <p>
@@ -785,18 +753,17 @@ const Dashboard: React.FC = () => {
                                 {formatDaysToExpire(
                                   metrics.certDaysToExpire
                                 )}
-                                {metrics.hasExpiringCertSoon &&
-                                  " · revisar"}
+                                {metrics.hasExpiringCertSoon && " · revisar"}
                               </p>
                             )}
                           </div>
                         </div>
                       </div>
 
-                      {/* CARDS PRINCIPALES: SEGURIDAD / DISPONIBILIDAD / EMAIL */}
+                      {/* CARDS PRINCIPALES */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-4">
                         {/* Seguridad */}
-                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Ciberseguridad
                           </p>
@@ -815,7 +782,7 @@ const Dashboard: React.FC = () => {
                         </div>
 
                         {/* Disponibilidad */}
-                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Disponibilidad
                           </p>
@@ -839,7 +806,7 @@ const Dashboard: React.FC = () => {
                         </div>
 
                         {/* Email & Dominio */}
-                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Email y dominio
                           </p>
@@ -858,11 +825,11 @@ const Dashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* UPTIME TIMELINE + BLOQUES DE DISPONIBILIDAD DETALLADA */}
+                      {/* Uptime timeline + detalle */}
                       <UptimeTimeline hourly={metrics.hourly} />
 
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs mb-4">
-                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Tiempo de respuesta medio (TTFB)
                           </p>
@@ -876,7 +843,7 @@ const Dashboard: React.FC = () => {
                           </p>
                         </div>
 
-                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Latencia p95
                           </p>
@@ -890,7 +857,7 @@ const Dashboard: React.FC = () => {
                           </p>
                         </div>
 
-                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Último estado
                           </p>
@@ -902,7 +869,7 @@ const Dashboard: React.FC = () => {
                           </p>
                         </div>
 
-                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Checks con error
                           </p>
@@ -922,9 +889,9 @@ const Dashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* RESUMEN DE INCIDENTES / ISSUES */}
+                      {/* Issues */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2 text-xs">
-                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3 sm:col-span-2">
+                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3 sm:col-span-2">
                           <p className="text-[11px] text-slate-400 mb-2">
                             Principales issues detectados
                           </p>
@@ -973,18 +940,18 @@ const Dashboard: React.FC = () => {
                           )}
                         </div>
 
-                        <div className="rounded-xl bg-slate-950/50 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Tipos de incidencias técnicas
                           </p>
                           <p className="text-[10px] text-slate-400 leading-relaxed">
-                            Timeouts / red: {metrics.timeoutErrors} · HTTP
-                            5xx: {metrics.http5xxErrors} · HTTP 4xx / WAF:{" "}
+                            Timeouts / red: {metrics.timeoutErrors} · HTTP 5xx:{" "}
+                            {metrics.http5xxErrors} · HTTP 4xx / WAF:{" "}
                             {metrics.http4xxErrors}
                           </p>
                           <p className="text-[10px] text-slate-500 mt-1">
-                            Te ayuda a ver si los problemas vienen de
-                            caídas, red o bloqueos de aplicación.
+                            Te ayuda a ver si los problemas vienen de caídas,
+                            red o bloqueos de aplicación.
                           </p>
                         </div>
                       </div>
@@ -994,10 +961,9 @@ const Dashboard: React.FC = () => {
                   {!metricsLoading &&
                     !metricsError &&
                     (!metrics || metrics.totalChecks === 0) && (
-                      <p className="text-xs text-slate-500">
+                      <p className="mt-2 text-[11px] text-slate-500">
                         Aún no hay suficientes datos para este dominio. Deja
-                        pasar unos minutos para que se recojan checks de
-                        salud.
+                        pasar unos minutos para que se recojan checks de salud.
                       </p>
                     )}
                 </div>
@@ -1005,8 +971,8 @@ const Dashboard: React.FC = () => {
             </div>
           </>
         )}
-      </div>
-    </div>
+      </PageCard>
+    </>
   );
 };
 
