@@ -2,6 +2,8 @@
 import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getPlanLabel, getPlanDetail } from "@/utils/plan";
+import Logo from "@/assets/zntinel-logo.svg";
+
 
 import {
   Shield,
@@ -73,8 +75,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               <div className="text-[11px] font-semibold tracking-[0.28em] text-slate-400">
                 ZNTINEL
               </div>
-              <div className="text-[11px] text-slate-500">
-                Control Center · v1.0
+              <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-sky-500 via-cyan-400 to-indigo-400 flex items-center justify-center shadow-[0_0_32px_rgba(56,189,248,0.55)]">
+                <img
+                  src={Logo}
+                  className="w-4 h-4"
+                  alt="Zntinel logo"
+                />
               </div>
             </div>
           </div>

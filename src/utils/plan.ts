@@ -10,7 +10,7 @@ export function getPlanLabel(plan: PlanId): string {
     case "business":
       return "Business";
     case "premium":
-      return "Enterprise";
+      return "Premium";
     default:
       return "—";
   }
