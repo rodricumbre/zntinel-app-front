@@ -19,21 +19,6 @@ type AppLayoutProps = {
   children: React.ReactNode;
 };
 
-type PlanId = "free" | "business" | "premium" | string | undefined;
-
-function getPlanDetail(plan: PlanId) {
-  switch (plan) {
-    case "free":
-      return "1 dominio · 1 usuario";
-    case "business":
-      return "hasta 2 dominios · 5 usuarios";
-    case "premium":
-      return "dominios y seats ampliables";
-    default:
-      return "Plan no asignado";
-  }
-}
-
 type NavItem = {
   label: string;
   path: string;
@@ -53,7 +38,7 @@ const navItems: NavItem[] = [
 const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, account, logout } = useAuth();
   const planLabel = account ? getPlanLabel(account.plan) : "Sin plan";
 
 
