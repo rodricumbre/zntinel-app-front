@@ -1,6 +1,8 @@
 // src/components/layout/AppLayout.tsx
 import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { getPlanLabel, getPlanDetail } from "@/utils/plan";
+
 import {
   Shield,
   BarChart2,
@@ -16,6 +18,21 @@ import { useAuth } from "@/lib/auth";
 type AppLayoutProps = {
   children: React.ReactNode;
 };
+
+type PlanId = "free" | "business" | "premium" | string | undefined;
+
+function getPlanDetail(plan: PlanId) {
+  switch (plan) {
+    case "free":
+      return "1 dominio · 1 usuario";
+    case "business":
+      return "hasta 2 dominios · 5 usuarios";
+    case "premium":
+      return "dominios y seats ampliables";
+    default:
+      return "Plan no asignado";
+  }
+}
 
 type NavItem = {
   label: string;
@@ -37,6 +54,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const planLabel = account ? getPlanLabel(account.plan) : "Sin plan";
+
 
   const handleLogout = async () => {
     try {
@@ -156,7 +175,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
               Estado: Todos los sistemas operativos
             </span>
             <span className="rounded-full border border-slate-700 px-2 py-0.5 text-slate-400">
-              Plan: {user?.plan ?? "—"}
+              Plan:{" "}
+              <span className="font-semibold">
+              {planLabel}
+              </span>
             </span>
           </div>
         </header>
