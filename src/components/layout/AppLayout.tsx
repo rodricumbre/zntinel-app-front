@@ -1,3 +1,4 @@
+// src/components/layout/AppLayout.tsx
 import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -47,7 +48,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#030712] text-[#e2e8f0] flex">
+    // Layout fijado a viewport; solo scrollea el main
+    <div className="h-screen overflow-hidden bg-[#030712] text-[#e2e8f0] flex">
       {/* Halos de fondo en azul/cian/morado */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-32 -left-32 h-72 w-72 rounded-full bg-cyan-500/14 blur-3xl" />
@@ -55,8 +57,8 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         <div className="absolute top-1/3 -right-32 h-64 w-64 rounded-full bg-sky-400/10 blur-3xl" />
       </div>
 
-      {/* SIDEBAR */}
-      <aside className="relative z-20 w-60 border-r border-slate-900/90 bg-[#050816]/95 backdrop-blur-xl flex flex-col">
+      {/* SIDEBAR fijo en altura */}
+      <aside className="relative z-20 w-60 h-full flex-shrink-0 border-r border-slate-900/90 bg-[#050816]/95 backdrop-blur-xl flex flex-col">
         {/* Brand */}
         <div className="h-16 px-5 flex items-center border-b border-slate-900/90">
           <div className="flex items-center gap-2">
@@ -74,7 +76,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </div>
         </div>
 
-        {/* Navegación */}
+        {/* Navegación (si algún día crece mucho, solo scrollea esta parte) */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const active = location.pathname === item.path;
@@ -101,7 +103,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           })}
         </nav>
 
-        {/* User / Logout */}
+        {/* User / Logout siempre visible abajo */}
         <div className="border-t border-slate-900/90 px-3 py-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -133,7 +135,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       </aside>
 
       {/* MAIN */}
-      <main className="relative z-10 flex-1 flex flex-col">
+      <main className="relative z-10 flex-1 flex flex-col h-full">
         {/* TOPBAR */}
         <header className="h-16 border-b border-slate-900/80 bg-[#050818]/90 backdrop-blur-xl flex items-center px-6 justify-between">
           <div className="flex flex-col">
@@ -146,7 +148,6 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </div>
 
           <div className="flex items-center gap-3 text-[11px]">
-            {/* Indicador de monitorización continuo, muy sutil */}
             <div className="flex items-center gap-1.5 rounded-full border border-sky-400/60 bg-sky-500/10 px-2.5 py-0.5 text-sky-100">
               <span className="inline-flex h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse" />
               <span>Monitorización continua</span>
@@ -160,10 +161,10 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </div>
         </header>
 
-        {/* Sub-barra con gradiente (detalle visual tipo “chart”) */}
+        {/* Barra de gradiente */}
         <div className="h-1 w-full bg-gradient-to-r from-sky-500/40 via-cyan-400/60 to-indigo-500/40 opacity-70" />
 
-        {/* CONTENT WRAPPER */}
+        {/* CONTENT WRAPPER con scroll propio */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <div className="max-w-6xl mx-auto">{children}</div>
         </div>
