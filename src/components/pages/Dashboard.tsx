@@ -492,13 +492,21 @@ const Dashboard: React.FC = () => {
 
                 {/* rango de tiempo */}
                 <div className="text-[11px] text-slate-500">
-                  Ventana analizada:{" "}
-                  {overview
-                    ? `${formatDateTimeShort(
-                        overview.from
-                      )} – ${formatDateTimeShort(overview.to)}`
-                    : "—"}
-                </div>
+  Page load estimado:{" "}
+  <span className="text-slate-100">{pageLoadLabel}</span>{" "}
+  · basado en origen, latencia y peticiones de comprobación de Zntinel.
+  {overview && (
+    <>
+      <br />
+      Ventana analizada:{" "}
+      <span className="text-slate-300">
+        {formatDateTimeShort(overview.from)} –{" "}
+        {formatDateTimeShort(overview.to)}
+      </span>
+    </>
+  )}
+</div>
+
               </div>
             </div>
           </PageCard>
