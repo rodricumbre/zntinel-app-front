@@ -19,6 +19,7 @@
     "react-dom": "^19.2.0",
     "react-i18next": "^15.7.4",
     "react-router-dom": "^6.30.2",
+    "recharts": "^3.5.1",
     "router-dom": "^3.0.3"
   },
   "devDependencies": {
