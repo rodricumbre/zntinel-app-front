@@ -1,4 +1,3 @@
-// src/components/layout/AppLayout.tsx
 import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -48,19 +47,19 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   };
 
   return (
-      <div className="h-full bg-[#05050a] text-[#e2e2e6] px-8 py-4">
-      {/* halo de fondo */}
+    <div className="min-h-screen bg-[#05050a] text-[#e2e2e6] flex">
+      {/* Halos de fondo */}
       <div className="pointer-events-none fixed inset-0">
-        <div className="absolute -top-32 -left-32 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
-        <div className="absolute bottom-0 right-0 h-72 w-72 rounded-full bg-fuchsia-500/5 blur-3xl" />
+        <div className="absolute -top-32 -left-32 h-72 w-72 rounded-full bg-cyan-500/12 blur-3xl" />
+        <div className="absolute bottom-0 right-0 h-80 w-80 rounded-full bg-red-500/10 blur-3xl" />
       </div>
 
       {/* SIDEBAR */}
-      <aside className="relative z-20 w-60 border-r border-slate-900/80 bg-slate-950/90 backdrop-blur-xl flex flex-col">
+      <aside className="relative z-20 w-60 border-r border-slate-900/80 bg-slate-950/95 backdrop-blur-xl flex flex-col">
         {/* Brand */}
         <div className="h-16 px-5 flex items-center border-b border-slate-900/80">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-cyan-400 to-sky-500 flex items-center justify-center shadow-[0_0_35px_rgba(56,189,248,0.45)]">
+            <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-red-500 via-rose-500 to-orange-400 flex items-center justify-center shadow-[0_0_35px_rgba(248,113,113,0.55)]">
               <Shield className="w-4 h-4 text-slate-950" />
             </div>
             <div>
@@ -74,7 +73,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           </div>
         </div>
 
-        {/* Nav */}
+        {/* Navegación */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const active = location.pathname === item.path;
@@ -86,7 +85,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 className={`group flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition 
                   ${
                     active
-                      ? "bg-cyan-500/15 text-cyan-200 border border-cyan-500/50 shadow-[0_0_18px_rgba(56,189,248,0.25)]"
+                      ? "bg-red-500/15 text-red-100 border border-red-500/60 shadow-[0_0_18px_rgba(248,113,113,0.45)]"
                       : "text-slate-400 hover:text-slate-100 hover:bg-slate-900/80 border border-transparent"
                   }`}
               >
@@ -123,7 +122,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
             </div>
             <button
               onClick={handleLogout}
-              className="inline-flex items-center justify-center rounded-lg border border-slate-800 px-2 py-1.5 text-[11px] text-slate-400 hover:border-red-500/70 hover:text-red-300 hover:bg-red-950/30 transition"
+              className="inline-flex items-center justify-center rounded-lg border border-slate-800 px-2 py-1.5 text-[11px] text-slate-400 hover:border-red-500/70 hover:text-red-300 hover:bg-red-950/40 transition"
             >
               <LogOut className="w-3 h-3 mr-1" />
               Salir
@@ -138,13 +137,18 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         <header className="h-16 border-b border-slate-900/80 bg-slate-950/80 backdrop-blur-xl flex items-center px-6 justify-between">
           <div className="flex flex-col">
             <span className="text-xs font-medium text-slate-400">
-              Zntinel · Managed WAF & Bot Defense
+              Zntinel · Managed WAF &amp; Bot Defense
             </span>
             <span className="text-sm text-slate-100">
               Vista: {getPageTitle(location.pathname)}
             </span>
           </div>
           <div className="flex items-center gap-3 text-[11px]">
+            {/* LIVE MONITORING pill roja */}
+            <div className="flex items-center gap-1.5 rounded-full border border-red-500/80 bg-red-500/15 px-2.5 py-0.5 text-red-200 shadow-[0_0_20px_rgba(248,113,113,0.55)]">
+              <span className="inline-flex h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
+              <span>LIVE MONITORING</span>
+            </div>
             <span className="rounded-full border border-emerald-500/60 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
               Status: All systems operational
             </span>
@@ -156,9 +160,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 
         {/* CONTENT WRAPPER */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
-          <div className="max-w-6xl mx-auto">
-            {children}
-          </div>
+          <div className="max-w-6xl mx-auto">{children}</div>
         </div>
       </main>
     </div>

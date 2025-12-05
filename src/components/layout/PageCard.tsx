@@ -1,24 +1,20 @@
 import React from "react";
 
-export default function PageCard({
-  title,
-  subtitle,
-  children,
-}: {
+type PageCardProps = {
   title?: string;
   subtitle?: string;
   children: React.ReactNode;
-}) {
+};
+
+const PageCard: React.FC<PageCardProps> = ({ title, subtitle, children }) => {
   return (
     <div className="relative w-full">
-
-      {/* Líneas animadas de fondo */}
+      {/* Línea de escaneo horizontal roja */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="animate-scanLine opacity-10 bg-red-500 h-px w-full absolute top-0" />
+        <div className="animate-scanLine opacity-20 bg-red-500 h-px w-full absolute top-0" />
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-[#15151c]/90 backdrop-blur-xl p-6 shadow-[0_0_35px_rgba(255,20,60,0.08)]">
-
+      <div className="rounded-2xl border border-white/10 bg-[#15151c]/90 backdrop-blur-xl p-6 shadow-[0_0_35px_rgba(248,113,113,0.15)]">
         {title && (
           <h1 className="text-lg font-semibold text-white tracking-tight mb-1">
             {title}
@@ -33,4 +29,6 @@ export default function PageCard({
       </div>
     </div>
   );
-}
+};
+
+export default PageCard;
