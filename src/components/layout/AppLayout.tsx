@@ -64,23 +64,27 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       {/* SIDEBAR fijo en altura */}
       <aside className="relative z-20 w-60 h-full flex-shrink-0 border-r border-slate-900/90 bg-[#050816]/95 backdrop-blur-xl flex flex-col">
         {/* Brand */}
-         <div className="h-16 px-5 flex items-center border-b border-slate-900/90">
-          <div className="flex items-center gap-3">
-            <img
-              src={Logo}
-              alt="Zntinel"
-              className="h-7 w-auto select-none pointer-events-none"
-            />
-            <div>
-              <div className="text-[11px] font-semibold tracking-[0.28em] text-slate-400">
-                ZNTINEL
-              </div>
-            </div>
-          </div>
-          <div className="text-[9px] font-semibold tracking-[0.28em] text-slate-400">
-                Control Center  -  v1.2.1
-          </div>
-        </div>
+<div className="h-16 px-5 flex items-center border-b border-slate-900/90">
+  <div className="flex items-center gap-3">
+    {/* Logo */}
+    <img
+      src={Logo}
+      alt="Zntinel"
+      className="h-7 w-auto select-none pointer-events-none"
+    />
+
+    {/* Textos del brand */}
+    <div className="flex flex-col leading-tight">
+      <span className="text-[11px] font-semibold tracking-[0.28em] text-slate-400">
+        ZNTINEL
+      </span>
+
+      <span className="text-[9px] font-medium tracking-[0.20em] text-slate-500">
+        Control Center – v1.2.1
+      </span>
+    </div>
+  </div>
+</div>
 
         {/* Navegación (si algún día crece mucho, solo scrollea esta parte) */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
