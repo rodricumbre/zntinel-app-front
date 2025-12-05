@@ -48,7 +48,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f0f13] text-[#e2e2e6] px-6 py-8">
+      <div className="h-full bg-[#05050a] text-[#e2e2e6] px-8 py-4">
       {/* halo de fondo */}
       <div className="pointer-events-none fixed inset-0">
         <div className="absolute -top-32 -left-32 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />

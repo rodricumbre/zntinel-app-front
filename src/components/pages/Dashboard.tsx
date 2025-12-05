@@ -484,7 +484,7 @@ const Dashboard: React.FC = () => {
     metrics?.securityScore != null ? metrics.securityScore : null;
 
   return (
-    <div className="min-h-screen bg-[#0f0f13] text-[#e2e2e6] px-6 py-8">
+    <div className="h-full bg-[#05050a] text-[#e2e2e6] px-8 py-4">
       <DomainOnboardingModal
         open={isOnboardingOpen}
         maxDomains={maxDomains}
@@ -532,7 +532,7 @@ const Dashboard: React.FC = () => {
         </div>
 
         {!hasAnyDomain ? (
-          <div className="mt-10 rounded-2xl border border-white/10 bg-[#15151c]/90 p-8 text-center shadow-[0_0_35px_rgba(0,0,0,0.7)]">
+            <div className="mt-4 rounded-2xl border border-white/10 bg-[#15151c]/90 p-8 text-center shadow-[0_0_35px_rgba(0,0,0,0.7)]">
             <h1 className="text-xl font-semibold mb-2">
               Añade tu dominio para comenzar
             </h1>
