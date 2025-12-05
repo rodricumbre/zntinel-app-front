@@ -27,6 +27,7 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
+  { label: "Overview", path: "/dashboard", icon: LayoutDashboard },
   { label: "Dominios", path: "/clients", icon: Globe2 },
   { label: "Uso de cuenta", path: "/account-usage", icon: BarChart2 },
   { label: "Miembros", path: "/members", icon: Users },
@@ -189,7 +190,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
 function getPageTitle(pathname: string): string {
   const found = navItems.find((n) => n.path === pathname);
   if (found) return found.label;
-  if (pathname === "/") return "Dashboard";
+  if (pathname === "/") return "Overview";
   return "Panel";
 }
 
