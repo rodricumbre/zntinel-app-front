@@ -691,7 +691,6 @@ const Dashboard: React.FC = () => {
     </div>
   )}
 </PageCard>
-
         </div>
 
         {/* Columna derecha */}
