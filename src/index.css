@@ -6,3 +6,21 @@ body {
   @apply bg-zntinel-bg text-slate-100;
 }
 
+@keyframes scanLine {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(100%); }
+}
+
+.animate-scanLine {
+  animation: scanLine 4s linear infinite;
+}
+
+@keyframes pulseBorder {
+  0% { box-shadow: 0 0 0px rgba(255,35,65,0.35); }
+  50% { box-shadow: 0 0 12px rgba(255,35,65,0.55); }
+  100% { box-shadow: 0 0 0px rgba(255,35,65,0.35); }
+}
+
+.live-border {
+  animation: pulseBorder 2.5s infinite ease-in-out;
+}

@@ -1,24 +1,36 @@
-// src/components/layout/PageCard.tsx
 import React from "react";
 
-type Props = {
-  title: string;
+export default function PageCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title?: string;
   subtitle?: string;
   children: React.ReactNode;
-};
-
-const PageCard: React.FC<Props> = ({ title, subtitle, children }) => {
+}) {
   return (
-    <div className="rounded-2xl border border-slate-800/80 bg-slate-900/80 shadow-[0_18px_60px_rgba(0,0,0,0.55)] p-5">
-      <div className="mb-4">
-        <h1 className="text-lg font-semibold text-slate-50">{title}</h1>
-        {subtitle && (
-          <p className="mt-1 text-xs text-slate-400">{subtitle}</p>
-        )}
+    <div className="relative w-full">
+
+      {/* Líneas animadas de fondo */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="animate-scanLine opacity-10 bg-red-500 h-px w-full absolute top-0" />
       </div>
-      {children}
+
+      <div className="rounded-2xl border border-white/10 bg-[#15151c]/90 backdrop-blur-xl p-6 shadow-[0_0_35px_rgba(255,20,60,0.08)]">
+
+        {title && (
+          <h1 className="text-lg font-semibold text-white tracking-tight mb-1">
+            {title}
+          </h1>
+        )}
+
+        {subtitle && (
+          <p className="text-sm text-[#9a9aa3] mb-4">{subtitle}</p>
+        )}
+
+        {children}
+      </div>
     </div>
   );
-};
-
-export default PageCard;
+}

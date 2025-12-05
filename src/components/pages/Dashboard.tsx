@@ -531,8 +531,8 @@ const Dashboard: React.FC = () => {
                       className={[
                         "px-3 py-1.5 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap",
                         isActive
-                          ? "bg-cyan-400 text-slate-950 border-cyan-400 shadow-[0_0_18px_rgba(34,211,238,0.4)]"
-                          : "bg-slate-950/80 text-slate-200 border-slate-700 hover:border-cyan-500/60",
+                          ? "bg-[#ff1133] text-white border-[#ff1133] shadow-[0_0_15px_rgba(255,17,51,0.45)] shadow-[0_0_18px_rgba(34,211,238,0.4)]"
+                          : "bg-[#1b1b24] text-[#d4d4d8] border-white/10 hover:border-[#ff1133]/40 transition-all",
                       ].join(" ")}
                     >
                       {d.hostname}
@@ -763,7 +763,7 @@ const Dashboard: React.FC = () => {
                       {/* CARDS PRINCIPALES */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-4">
                         {/* Seguridad */}
-                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Ciberseguridad
                           </p>
@@ -782,7 +782,7 @@ const Dashboard: React.FC = () => {
                         </div>
 
                         {/* Disponibilidad */}
-                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Disponibilidad
                           </p>
@@ -806,7 +806,7 @@ const Dashboard: React.FC = () => {
                         </div>
 
                         {/* Email & Dominio */}
-                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Email y dominio
                           </p>
@@ -829,7 +829,7 @@ const Dashboard: React.FC = () => {
                       <UptimeTimeline hourly={metrics.hourly} />
 
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs mb-4">
-                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Tiempo de respuesta medio (TTFB)
                           </p>
@@ -843,7 +843,7 @@ const Dashboard: React.FC = () => {
                           </p>
                         </div>
 
-                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Latencia p95
                           </p>
@@ -857,7 +857,7 @@ const Dashboard: React.FC = () => {
                           </p>
                         </div>
 
-                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Último estado
                           </p>
@@ -869,7 +869,7 @@ const Dashboard: React.FC = () => {
                           </p>
                         </div>
 
-                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Checks con error
                           </p>
@@ -891,7 +891,7 @@ const Dashboard: React.FC = () => {
 
                       {/* Issues */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2 text-xs">
-                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3 sm:col-span-2">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3 sm:col-span-2">
                           <p className="text-[11px] text-slate-400 mb-2">
                             Principales issues detectados
                           </p>
@@ -940,7 +940,7 @@ const Dashboard: React.FC = () => {
                           )}
                         </div>
 
-                        <div className="rounded-xl bg-slate-950/60 border border-slate-800 p-3">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
                           <p className="text-[11px] text-slate-400 mb-1">
                             Tipos de incidencias técnicas
                           </p>

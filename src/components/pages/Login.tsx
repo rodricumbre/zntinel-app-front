@@ -126,7 +126,7 @@ const Login: React.FC = () => {
               onClick={() => setLang("es")}
               className={`px-2 py-0.5 rounded-full border text-[11px] transition ${
                 lang === "es"
-                  ? "bg-cyan-400 text-slate-950 border-cyan-400"
+                  ? "bg-[#ff1133] text-white border-[#ff1133] shadow-[0_0_15px_rgba(255,17,51,0.45)]"
                   : "bg-transparent text-slate-400 border-slate-600 hover:border-cyan-400/70 hover:text-cyan-300"
               }`}
             >
@@ -137,7 +137,7 @@ const Login: React.FC = () => {
               onClick={() => setLang("en")}
               className={`px-2 py-0.5 rounded-full border text-[11px] transition ${
                 lang === "en"
-                  ? "bg-cyan-400 text-slate-950 border-cyan-400"
+                  ? "bg-[#ff1133] text-white border-[#ff1133] shadow-[0_0_15px_rgba(255,17,51,0.45)]"
                   : "bg-transparent text-slate-400 border-slate-600 hover:border-cyan-400/70 hover:text-cyan-300"
               }`}
             >
