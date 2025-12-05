@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from "react";
 import { DomainOnboardingModal } from "@/components/domains/DomainOnboardingModal";
 import { useAuth } from "@/lib/auth";
-import PageCard from "@/components/layout/PageCard";
 
 type Domain = {
   id: string;
@@ -110,7 +109,8 @@ function mapApiMetrics(data: any): DomainMetrics {
     const total = Number(h.totalRequests ?? h.total_requests ?? 0) || 0;
     const blocked = Number(h.blockedRequests ?? h.blocked_requests ?? 0) || 0;
 
-    const uptimePercent = total > 0 ? ((total - blocked) / total) * 100 : null;
+    const uptimePercent =
+      total > 0 ? ((total - blocked) / total) * 100 : null;
 
     return {
       bucketStart: h.bucketStart ?? h.bucket_start,
@@ -176,41 +176,55 @@ const UptimeTimeline: React.FC<{ hourly: HourlyPoint[] }> = ({ hourly }) => {
   if (!hourly || hourly.length === 0) return null;
 
   const points = hourly.map((h, idx) => {
-    const x = hourly.length === 1 ? 0 : (idx / (hourly.length - 1)) * 100;
+    const x =
+      hourly.length === 1 ? 0 : (idx / (hourly.length - 1)) * 100;
+
     const uptime = h.uptimePercent ?? 100;
-    const safe = Math.max(0, Math.min(uptime, 100));
-    const y = 100 - safe;
+    const clamped = Math.max(0, Math.min(uptime, 100));
+    const y = 100 - clamped;
+
     return `${x},${y}`;
   });
 
   return (
-    <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+    <div className="mb-4 rounded-xl border border-white/10 bg-[#15151c] p-3 shadow-[0_0_18px_rgba(255,20,60,0.05)] relative overflow-hidden">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-red-500/60 to-transparent opacity-40 animate-scanLine" />
       <div className="flex items-center justify-between mb-2">
-        <p className="text-[11px] text-slate-400">Uptime últimas 24 h</p>
-        <p className="text-[10px] text-slate-500">
+        <p className="text-[11px] text-[#9a9aa3]">Uptime últimas 24 h</p>
+        <p className="text-[10px] text-[#6e6e78]">
           Cada punto representa 1 hora
         </p>
       </div>
       <svg
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
-        className="w-full h-24 text-cyan-400"
+        className="w-full h-24 text-[#ff1133]"
       >
         <line
           x1="0"
           y1="100"
           x2="100"
           y2="100"
-          stroke="rgba(148,163,184,0.4)"
-          strokeWidth={0.5}
+          stroke="rgba(148,163,184,0.35)"
+          strokeWidth={0.6}
         />
         <polyline
           fill="none"
           stroke="currentColor"
-          strokeWidth={1.5}
+          strokeWidth={1.7}
           points={points.join(" ")}
+          style={{ filter: "drop-shadow(0 0 3px rgba(255,17,51,0.55))" }}
         />
       </svg>
+      <div className="flex items-center gap-1 mt-2">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#ff1133] opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#ff1133]" />
+        </span>
+        <p className="text-[10px] text-[#9a9aa3]">
+          Recogiendo eventos en tiempo real…
+        </p>
+      </div>
     </div>
   );
 };
@@ -224,14 +238,15 @@ function getRiskLabel(risk: RiskLevel | null): string {
 }
 
 function getRiskBadgeClasses(risk: RiskLevel | null): string {
-  if (!risk) return "border-slate-600 bg-slate-900 text-slate-200";
+  if (!risk)
+    return "border-white/10 bg-[#1b1b24] text-[#e2e2e6]";
   if (risk === "low")
     return "border-emerald-500/60 bg-emerald-500/10 text-emerald-300";
   if (risk === "medium")
     return "border-amber-500/60 bg-amber-500/10 text-amber-200";
   if (risk === "high")
     return "border-orange-500/60 bg-orange-500/10 text-orange-200";
-  return "border-red-500/60 bg-red-500/10 text-red-200";
+  return "border-red-500/70 bg-red-500/10 text-red-200";
 }
 
 function formatPercent(n: number | null | undefined): string {
@@ -257,7 +272,9 @@ const Dashboard: React.FC = () => {
   const [recentlyVerifiedId, setRecentlyVerifiedId] =
     useState<string | null>(null);
 
-  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(null);
+  const [selectedDomainId, setSelectedDomainId] = useState<string | null>(
+    null
+  );
 
   const [metrics, setMetrics] = useState<DomainMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
@@ -267,7 +284,6 @@ const Dashboard: React.FC = () => {
 
   const maxDomains = getMaxDomainsForPlan(account?.plan);
 
-  // Carga dominios
   useEffect(() => {
     fetch(`${API_BASE}/domains`, { credentials: "include" })
       .then((r) => r.json())
@@ -294,7 +310,6 @@ const Dashboard: React.FC = () => {
       });
   }, []);
 
-  // Dominio por defecto
   useEffect(() => {
     if (!domains || domains.length === 0) return;
     if (!selectedDomainId) {
@@ -368,7 +383,6 @@ const Dashboard: React.FC = () => {
     }
   }
 
-  // Métricas al cambiar dominio
   useEffect(() => {
     if (!selectedDomainId || !domains) {
       setMetrics(null);
@@ -390,7 +404,6 @@ const Dashboard: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDomainId, domains]);
 
-  // Auto refresh cada 60 s
   useEffect(() => {
     if (!selectedDomainId) return;
 
@@ -454,14 +467,9 @@ const Dashboard: React.FC = () => {
 
   if (domains === null) {
     return (
-      <PageCard
-        title="Cargando tu panel de Zntinel…"
-        subtitle="Recuperando tus dominios y estado de seguridad."
-      >
-        <div className="h-24 flex items-center justify-center text-sm text-slate-400">
-          Cargando…
-        </div>
-      </PageCard>
+      <div className="min-h-screen bg-[#0f0f13] text-[#e2e2e6] flex items-center justify-center">
+        Cargando tu panel de Zntinel…
+      </div>
     );
   }
 
@@ -469,12 +477,14 @@ const Dashboard: React.FC = () => {
   const selectedDomain =
     domains.find((d) => d.id === selectedDomainId) || null;
 
-  const currentRiskLevel: RiskLevel | null = metrics?.riskLevel ?? null;
+  const currentRiskLevel: RiskLevel | null =
+    metrics?.riskLevel ?? null;
+
   const currentSecurityScore =
     metrics?.securityScore != null ? metrics.securityScore : null;
 
   return (
-    <>
+    <div className="min-h-screen bg-[#0f0f13] text-[#e2e2e6] px-6 py-8">
       <DomainOnboardingModal
         open={isOnboardingOpen}
         maxDomains={maxDomains}
@@ -492,27 +502,52 @@ const Dashboard: React.FC = () => {
         }}
       />
 
-      <PageCard
-        title="Resumen de seguridad del dominio"
-        subtitle="Selecciona un dominio, verifica el registro TXT y revisa su salud, disponibilidad y superficie de ataque."
-      >
+      <div className="max-w-5xl mx-auto relative">
+        {/* Glow de fondo */}
+        <div className="pointer-events-none absolute -top-24 -right-32 h-64 w-64 rounded-full bg-[#ff1133]/15 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -left-20 h-64 w-64 rounded-full bg-[#0ae4ff]/10 blur-3xl" />
+
+        {/* Header live */}
+        <div className="flex items-center justify-between mb-6 relative z-10">
+          <div>
+            <div className="text-[11px] font-semibold tracking-[0.32em] text-[#6e6e78]">
+              ZNTINEL · CONTROL CENTER
+            </div>
+            <h1 className="mt-2 text-xl font-semibold tracking-tight">
+              Estado de seguridad y disponibilidad
+            </h1>
+            <p className="mt-1 text-xs text-[#9a9aa3]">
+              Monitorización continua de tus dominios protegidos por Zntinel.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 rounded-full border border-red-500/50 bg-red-500/10 px-3 py-1 text-[11px] text-red-200 shadow-[0_0_18px_rgba(255,0,60,0.55)]">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+              </span>
+              LIVE MONITORING
+            </div>
+          </div>
+        </div>
+
         {!hasAnyDomain ? (
-          <div className="mt-4 text-center">
-            <h2 className="text-sm font-semibold mb-2 text-slate-100">
+          <div className="mt-10 rounded-2xl border border-white/10 bg-[#15151c]/90 p-8 text-center shadow-[0_0_35px_rgba(0,0,0,0.7)]">
+            <h1 className="text-xl font-semibold mb-2">
               Añade tu dominio para comenzar
-            </h2>
-            <p className="text-xs text-slate-400 mb-4">
-              Antes de ver métricas o configurar reglas, conecta al menos un
-              dominio a Zntinel.
+            </h1>
+            <p className="text-sm text-[#9a9aa3] mb-6">
+              Antes de ver métricas o configurar reglas, conecta al menos
+              un dominio a Zntinel.
             </p>
             <button
               onClick={() => setIsOnboardingOpen(true)}
-              className="rounded-lg bg-cyan-500 hover:bg-cyan-400 px-4 py-2 text-xs font-medium text-slate-950"
+              className="rounded-lg bg-[#ff1133] hover:bg-[#ff2745] px-4 py-2 text-sm font-medium text-white shadow-[0_0_22px_rgba(255,17,51,0.5)] transition"
             >
               Añadir dominio ahora
             </button>
             {error && (
-              <p className="mt-4 text-[11px] text-red-400">
+              <p className="mt-4 text-xs text-red-400">
                 Error: {error}
               </p>
             )}
@@ -520,8 +555,8 @@ const Dashboard: React.FC = () => {
         ) : (
           <>
             {/* pestañas dominios */}
-            <div className="flex items-center justify-between mb-4 mt-1">
-              <div className="flex items-center gap-2 overflow-x-auto">
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
                 {domains.map((d) => {
                   const isActive = d.id === selectedDomainId;
                   return (
@@ -529,10 +564,10 @@ const Dashboard: React.FC = () => {
                       key={d.id}
                       onClick={() => setSelectedDomainId(d.id)}
                       className={[
-                        "px-3 py-1.5 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap",
+                        "px-3 py-1.5 rounded-full text-xs font-medium border transition-all whitespace-nowrap",
                         isActive
-                          ? "bg-[#ff1133] text-white border-[#ff1133] shadow-[0_0_15px_rgba(255,17,51,0.45)] shadow-[0_0_18px_rgba(34,211,238,0.4)]"
-                          : "bg-[#1b1b24] text-[#d4d4d8] border-white/10 hover:border-[#ff1133]/40 transition-all",
+                          ? "bg-[#ff1133] text-white border-[#ff1133] shadow-[0_0_18px_rgba(255,17,51,0.6)]"
+                          : "bg-[#1b1b24] text-[#d4d4d8] border-white/10 hover:border-[#ff1133]/40",
                       ].join(" ")}
                     >
                       {d.hostname}
@@ -544,15 +579,15 @@ const Dashboard: React.FC = () => {
               {domains.length < maxDomains && (
                 <button
                   onClick={() => setIsOnboardingOpen(true)}
-                  className="rounded-lg bg-slate-900 hover:bg-slate-800 px-3 py-1.5 text-[11px] font-medium text-slate-100 border border-slate-700"
+                  className="rounded-lg bg-[#1b1b24] hover:bg-[#242430] px-3 py-1.5 text-xs font-medium text-[#e2e2e6] border border-white/10"
                 >
-                  Añadir dominio
+                  + Añadir dominio
                 </button>
               )}
             </div>
 
             {/* tarjeta verificación */}
-            <div className="space-y-3">
+            <div className="space-y-3 mt-2 relative z-10">
               {domains
                 .filter((d) => d.id === selectedDomainId)
                 .map((d) => {
@@ -561,36 +596,37 @@ const Dashboard: React.FC = () => {
                   const justVerified = recentlyVerifiedId === d.id;
 
                   const baseClasses =
-                    "rounded-xl p-4 text-xs transition-all duration-500";
+                    "rounded-xl p-4 text-sm transition-all duration-500";
                   let colorClasses =
-                    "border border-slate-800 bg-slate-950/80";
+                    "border border-white/10 bg-[#15151c]/90";
 
                   if (isPending) {
                     colorClasses =
-                      "border border-amber-500/60 bg-amber-500/5";
+                      "border border-amber-500/60 bg-amber-500/10";
                   }
                   if (isVerified) {
                     colorClasses =
-                      "border border-emerald-500/40 bg-emerald-500/5";
+                      "border border-emerald-500/40 bg-emerald-500/10";
                   }
                   if (justVerified) {
                     colorClasses =
-                      "border border-emerald-400 bg-emerald-500/15 shadow-[0_0_0_1px_rgba(16,185,129,0.6)] animate-pulse";
+                      "border border-emerald-400 bg-emerald-500/15 shadow-[0_0_0_1px_rgba(16,185,129,0.7)] animate-pulse";
                   }
 
                   return (
-                    <div key={d.id} className={`${baseClasses} ${colorClasses}`}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="font-medium text-slate-100 text-sm">
-                          {d.hostname}
-                        </div>
+                    <div
+                      key={d.id}
+                      className={`${baseClasses} ${colorClasses}`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="font-medium">{d.hostname}</div>
                         {isVerified && (
-                          <span className="text-[10px] rounded-full border border-emerald-500/60 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
+                          <span className="text-[11px] rounded-full border border-emerald-500/60 bg-emerald-500/10 px-2 py-0.5 text-emerald-300">
                             Verificado
                           </span>
                         )}
                         {isPending && (
-                          <span className="text-[10px] rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-amber-300">
+                          <span className="text-[11px] rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-amber-200">
                             Pendiente de verificación
                           </span>
                         )}
@@ -598,11 +634,11 @@ const Dashboard: React.FC = () => {
 
                       {isPending && (
                         <div className="mt-2 space-y-2">
-                          <p className="text-slate-300 text-[11px]">
-                            Añade este registro TXT en el DNS de tu dominio y
-                            después pulsa “Comprobar TXT”:
+                          <p className="text-[#e2e2e6] text-xs">
+                            Añade este registro TXT en el DNS de tu dominio
+                            y después pulsa “Comprobar TXT”:
                           </p>
-                          <code className="block text-[11px] bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
+                          <code className="block text-[11px] bg-black/40 border border-white/10 rounded-lg px-3 py-2">
                             Nombre: _zntinel.{d.hostname}
                             <br />
                             Valor: {d.verification_token}
@@ -611,7 +647,7 @@ const Dashboard: React.FC = () => {
                           <button
                             onClick={() => handleVerify(d)}
                             disabled={verifyingId === d.id}
-                            className="mt-2 inline-flex items-center rounded-lg bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 px-3 py-1.5 text-[11px] font-medium text-slate-950"
+                            className="mt-2 inline-flex items-center rounded-lg bg-[#ff1133] hover:bg-[#ff2745] disabled:opacity-60 px-3 py-1.5 text-xs font-medium text-white shadow-[0_0_16px_rgba(255,17,51,0.5)]"
                           >
                             {verifyingId === d.id
                               ? "Comprobando TXT…"
@@ -621,7 +657,7 @@ const Dashboard: React.FC = () => {
                       )}
 
                       {isVerified && (
-                        <p className="mt-2 text-emerald-200 text-[11px]">
+                        <p className="mt-2 text-emerald-200 text-xs">
                           {justVerified
                             ? "Dominio verificado correctamente. Cargando métricas…"
                             : "Dominio verificado. Las métricas del panel se basan en este dominio."}
@@ -633,26 +669,28 @@ const Dashboard: React.FC = () => {
             </div>
 
             {error && (
-              <p className="text-[11px] text-red-400 mt-3">
-                Error: {error}. No se ha podido verificar el registro TXT. Prueba
-                de nuevo en 15s.
+              <p className="text-xs text-red-400 mt-3">
+                Error: {error}
+                <br />
+                No se ha podido verificar el registro TXT. Prueba de nuevo en
+                15s.
               </p>
             )}
 
             {/* OVERVIEW */}
-            <div className="mt-6">
+            <div className="mt-8 relative z-10">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-slate-100">
+                <h2 className="text-sm font-semibold text-[#e2e2e6]">
                   Overview del dominio seleccionado
                 </h2>
                 <div className="flex items-center gap-3">
                   {metrics && metrics.lastCheckedAt && (
-                    <p className="text-[10px] text-slate-500">
+                    <p className="text-[11px] text-[#6e6e78]">
                       Último check: {formatDateTime(metrics.lastCheckedAt)}
                     </p>
                   )}
                   {lastUpdatedAt && (
-                    <p className="text-[10px] text-slate-500">
+                    <p className="text-[10px] text-[#6e6e78]">
                       Refrescado desde el panel:{" "}
                       {formatDateTime(lastUpdatedAt)}
                     </p>
@@ -665,34 +703,49 @@ const Dashboard: React.FC = () => {
                         triggerCheck: true,
                       })
                     }
-                    className="rounded-lg bg-slate-900 hover:bg-slate-800 px-3 py-1.5 text-[11px] font-medium text-slate-100 border border-slate-700"
+                    className="rounded-lg bg-[#1b1b24] hover:bg-[#242430] px-3 py-1.5 text-xs font-medium text-[#e2e2e6] border border-white/10 flex items-center gap-1"
                     disabled={manualRefreshing || metricsLoading}
                   >
+                    <span
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${
+                        manualRefreshing || metricsLoading
+                          ? "bg-[#ff1133] animate-pulse"
+                          : "bg-[#9a9aa3]"
+                      }`}
+                    />
                     {manualRefreshing || metricsLoading
                       ? "Actualizando…"
-                      : "Actualizar"}
+                      : "Actualizar ahora"}
                   </button>
                 </div>
               </div>
 
               {!selectedDomain ? (
-                <p className="text-[11px] text-slate-500">
+                <p className="text-xs text-[#6e6e78]">
                   Selecciona un dominio para ver sus métricas.
                 </p>
               ) : selectedDomain.dns_status !== "ok" ? (
-                <p className="text-[11px] text-slate-500">
+                <p className="text-xs text-[#6e6e78]">
                   Verifica el dominio para empezar a recoger métricas.
                 </p>
               ) : (
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-4">
+                <div
+                  className={[
+                    "rounded-2xl bg-[#15151c]/95 p-4 border",
+                    metricsLoading || manualRefreshing
+                      ? "border-[#ff1133]/60 live-border"
+                      : "border-white/10",
+                    "shadow-[0_0_35px_rgba(0,0,0,0.8)]",
+                  ].join(" ")}
+                >
                   {metricsLoading && !metrics && (
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-xs text-[#9a9aa3]">
                       Cargando métricas de {selectedDomain.hostname}…
                     </p>
                   )}
 
                   {metricsError && (
-                    <p className="text-[11px] text-red-400">
+                    <p className="text-xs text-red-400">
                       Error al cargar métricas: {metricsError}
                     </p>
                   )}
@@ -700,15 +753,16 @@ const Dashboard: React.FC = () => {
                   {!metricsLoading && !metricsError && metrics && (
                     <>
                       {/* HERO GLOBAL */}
-                      <div className="mb-4 rounded-xl border border-slate-800 bg-slate-950/60 p-3 sm:p-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="mb-4 rounded-xl border border-white/10 bg-[#14141b] p-3 sm:p-4 relative overflow-hidden">
+                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#ff1133] to-transparent opacity-50" />
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 relative z-10">
                           <div>
-                            <p className="text-[11px] text-slate-400 mb-1">
+                            <p className="text-[11px] text-[#9a9aa3] mb-1">
                               Estado global
                             </p>
                             <div className="flex items-center gap-3">
                               <div className="flex items-baseline gap-2">
-                                <span className="text-[11px] text-slate-400">
+                                <span className="text-xs text-[#9a9aa3]">
                                   Seguridad:
                                 </span>
                                 <span className="text-sm font-semibold">
@@ -728,7 +782,7 @@ const Dashboard: React.FC = () => {
                                 {getRiskLabel(currentRiskLevel)}
                               </span>
                             </div>
-                            <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-400">
+                            <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-[#9a9aa3]">
                               <span>
                                 Disponibilidad 24 h:{" "}
                                 {formatPercent(metrics.uptimePercent)}
@@ -742,10 +796,11 @@ const Dashboard: React.FC = () => {
                               </span>
                             </div>
                           </div>
-                          <div className="text-[11px] text-slate-400 space-y-1">
+                          <div className="text-[11px] text-[#9a9aa3] space-y-1">
                             <p>
-                              Ventana analizada: {formatDateTime(metrics.from)}{" "}
-                              – {formatDateTime(metrics.to)}
+                              Ventana analizada:{" "}
+                              {formatDateTime(metrics.from)} –{" "}
+                              {formatDateTime(metrics.to)}
                             </p>
                             {metrics.certDaysToExpire != null && (
                               <p>
@@ -753,7 +808,8 @@ const Dashboard: React.FC = () => {
                                 {formatDaysToExpire(
                                   metrics.certDaysToExpire
                                 )}
-                                {metrics.hasExpiringCertSoon && " · revisar"}
+                                {metrics.hasExpiringCertSoon &&
+                                  " · revisar"}
                               </p>
                             )}
                           </div>
@@ -762,28 +818,26 @@ const Dashboard: React.FC = () => {
 
                       {/* CARDS PRINCIPALES */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-4">
-                        {/* Seguridad */}
-                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
-                          <p className="text-[11px] text-slate-400 mb-1">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 p-3 shadow-[0_0_18px_rgba(255,17,51,0.05)]">
+                          <p className="text-[11px] text-[#9a9aa3] mb-1">
                             Ciberseguridad
                           </p>
-                          <p className="text-lg font-semibold mb-1">
+                          <p className="text-lg font-semibold mb-1 text-white">
                             {currentSecurityScore != null
                               ? `${currentSecurityScore.toFixed(0)}/100`
                               : "—"}
                           </p>
-                          <p className="text-[10px] text-slate-500">
+                          <p className="text-[10px] text-[#9a9aa3]">
                             Riesgo: {getRiskLabel(currentRiskLevel)}
                           </p>
-                          <p className="text-[10px] text-slate-500 mt-1">
+                          <p className="text-[10px] text-[#9a9aa3] mt-1">
                             Críticos: {metrics.criticalIssues ?? 0} · Avisos:{" "}
                             {metrics.warningIssues ?? 0}
                           </p>
                         </div>
 
-                        {/* Disponibilidad */}
-                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
-                          <p className="text-[11px] text-slate-400 mb-1">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 p-3">
+                          <p className="text-[11px] text-[#9a9aa3] mb-1">
                             Disponibilidad
                           </p>
                           <p className="text-lg font-semibold text-emerald-400">
@@ -791,13 +845,13 @@ const Dashboard: React.FC = () => {
                               ? "—"
                               : `${metrics.uptimePercent.toFixed(1)}%`}
                           </p>
-                          <p className="text-[10px] text-slate-500 mt-1">
+                          <p className="text-[10px] text-[#9a9aa3] mt-1">
                             TTFB medio:{" "}
                             {metrics.avgTtfbMs != null
                               ? `${metrics.avgTtfbMs} ms`
                               : "—"}
                           </p>
-                          <p className="text-[10px] text-slate-500">
+                          <p className="text-[10px] text-[#9a9aa3]">
                             p95:{" "}
                             {metrics.p95TtfbMs != null
                               ? `${metrics.p95TtfbMs} ms`
@@ -805,12 +859,11 @@ const Dashboard: React.FC = () => {
                           </p>
                         </div>
 
-                        {/* Email & Dominio */}
-                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
-                          <p className="text-[11px] text-slate-400 mb-1">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 p-3">
+                          <p className="text-[11px] text-[#9a9aa3] mb-1">
                             Email y dominio
                           </p>
-                          <p className="text-[10px] text-slate-400 leading-relaxed">
+                          <p className="text-[10px] text-[#d4d4d8] leading-relaxed">
                             SPF: {metrics.spfStatus.toUpperCase()}
                             <br />
                             DKIM: {metrics.dkimStatus.toUpperCase()}
@@ -819,18 +872,17 @@ const Dashboard: React.FC = () => {
                             <br />
                             DNSSEC: {metrics.dnssecStatus.toUpperCase()}
                           </p>
-                          <p className="text-[10px] text-slate-500 mt-1">
+                          <p className="text-[10px] text-[#9a9aa3] mt-1">
                             Protege frente a suplantación de correo y fraude.
                           </p>
                         </div>
                       </div>
 
-                      {/* Uptime timeline + detalle */}
                       <UptimeTimeline hourly={metrics.hourly} />
 
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs mb-4">
-                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
-                          <p className="text-[11px] text-slate-400 mb-1">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 p-3">
+                          <p className="text-[11px] text-[#9a9aa3] mb-1">
                             Tiempo de respuesta medio (TTFB)
                           </p>
                           <p className="text-lg font-semibold">
@@ -838,13 +890,13 @@ const Dashboard: React.FC = () => {
                               ? "—"
                               : `${metrics.avgTtfbMs} ms`}
                           </p>
-                          <p className="text-[10px] text-slate-500 mt-1">
+                          <p className="text-[10px] text-[#9a9aa3] mt-1">
                             Media de todos los checks.
                           </p>
                         </div>
 
-                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
-                          <p className="text-[11px] text-slate-400 mb-1">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 p-3">
+                          <p className="text-[11px] text-[#9a9aa3] mb-1">
                             Latencia p95
                           </p>
                           <p className="text-lg font-semibold">
@@ -852,31 +904,31 @@ const Dashboard: React.FC = () => {
                               ? "—"
                               : `${metrics.p95TtfbMs} ms`}
                           </p>
-                          <p className="text-[10px] text-slate-500 mt-1">
+                          <p className="text-[10px] text-[#9a9aa3] mt-1">
                             El 95% de las respuestas fue más rápido que esto.
                           </p>
                         </div>
 
-                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
-                          <p className="text-[11px] text-slate-400 mb-1">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 p-3">
+                          <p className="text-[11px] text-[#9a9aa3] mb-1">
                             Último estado
                           </p>
                           <p className="text-lg font-semibold">
                             {metrics.lastStatusCode ?? "—"}
                           </p>
-                          <p className="text-[10px] text-slate-500 mt-1">
+                          <p className="text-[10px] text-[#9a9aa3] mt-1">
                             Checks totales: {metrics.totalChecks}
                           </p>
                         </div>
 
-                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
-                          <p className="text-[11px] text-slate-400 mb-1">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 p-3">
+                          <p className="text-[11px] text-[#9a9aa3] mb-1">
                             Checks con error
                           </p>
                           <p className="text-lg font-semibold">
                             {metrics.errorChecks ?? 0}
                           </p>
-                          <p className="text-[10px] text-slate-500 mt-1">
+                          <p className="text-[10px] text-[#9a9aa3] mt-1">
                             Ratio de error:{" "}
                             {metrics.totalChecks > 0
                               ? `${(
@@ -889,10 +941,9 @@ const Dashboard: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Issues */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2 text-xs">
-                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3 sm:col-span-2">
-                          <p className="text-[11px] text-slate-400 mb-2">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 p-3 sm:col-span-2">
+                          <p className="text-[11px] text-[#9a9aa3] mb-2">
                             Principales issues detectados
                           </p>
                           {metrics.topIssues && metrics.topIssues.length > 0 ? (
@@ -909,7 +960,7 @@ const Dashboard: React.FC = () => {
                                 return (
                                   <div
                                     key={issue.id}
-                                    className="flex items-center justify-between gap-2 rounded-lg bg-slate-950/60 border border-slate-800 px-2 py-1.5"
+                                    className="flex items-center justify-between gap-2 rounded-lg bg-[#111118] border border-white/10 px-2 py-1.5"
                                   >
                                     <div className="flex items-center gap-2 min-w-0">
                                       <span
@@ -924,7 +975,7 @@ const Dashboard: React.FC = () => {
                                         {issue.title}
                                       </p>
                                     </div>
-                                    <p className="text-[9px] text-slate-500 whitespace-nowrap">
+                                    <p className="text-[9px] text-[#6e6e78] whitespace-nowrap">
                                       {formatDateTime(issue.detectedAt)}
                                     </p>
                                   </div>
@@ -932,7 +983,7 @@ const Dashboard: React.FC = () => {
                               })}
                             </div>
                           ) : (
-                            <p className="text-[10px] text-slate-500">
+                            <p className="text-[10px] text-[#6e6e78]">
                               No se han registrado issues detallados en esta
                               ventana. Cuando el motor de seguridad detecte
                               problemas, aparecerán aquí.
@@ -940,16 +991,16 @@ const Dashboard: React.FC = () => {
                           )}
                         </div>
 
-                        <div className="rounded-xl bg-[#15151c] border border-white/10 shadow-[0_0_18px_rgba(255,20,60,0.05)] p-3">
-                          <p className="text-[11px] text-slate-400 mb-1">
+                        <div className="rounded-xl bg-[#15151c] border border-white/10 p-3">
+                          <p className="text-[11px] text-[#9a9aa3] mb-1">
                             Tipos de incidencias técnicas
                           </p>
-                          <p className="text-[10px] text-slate-400 leading-relaxed">
+                          <p className="text-[10px] text-[#d4d4d8] leading-relaxed">
                             Timeouts / red: {metrics.timeoutErrors} · HTTP 5xx:{" "}
                             {metrics.http5xxErrors} · HTTP 4xx / WAF:{" "}
                             {metrics.http4xxErrors}
                           </p>
-                          <p className="text-[10px] text-slate-500 mt-1">
+                          <p className="text-[10px] text-[#9a9aa3] mt-1">
                             Te ayuda a ver si los problemas vienen de caídas,
                             red o bloqueos de aplicación.
                           </p>
@@ -961,7 +1012,7 @@ const Dashboard: React.FC = () => {
                   {!metricsLoading &&
                     !metricsError &&
                     (!metrics || metrics.totalChecks === 0) && (
-                      <p className="mt-2 text-[11px] text-slate-500">
+                      <p className="text-xs text-[#6e6e78]">
                         Aún no hay suficientes datos para este dominio. Deja
                         pasar unos minutos para que se recojan checks de salud.
                       </p>
@@ -971,8 +1022,8 @@ const Dashboard: React.FC = () => {
             </div>
           </>
         )}
-      </PageCard>
-    </>
+      </div>
+    </div>
   );
 };
 
