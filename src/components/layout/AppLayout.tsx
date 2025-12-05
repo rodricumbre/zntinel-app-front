@@ -64,7 +64,7 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       {/* SIDEBAR fijo en altura */}
       <aside className="relative z-20 w-60 h-full flex-shrink-0 border-r border-slate-900/90 bg-[#050816]/95 backdrop-blur-xl flex flex-col">
         {/* Brand */}
-        <div className="h-16 px-5 flex items-center border-b border-slate-900/90">
+         <div className="h-16 px-5 flex items-center border-b border-slate-900/90">
           <div className="flex items-center gap-3">
             <img
               src={Logo}
@@ -76,6 +76,9 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                 ZNTINEL
               </div>
             </div>
+          </div>
+          <div className="text-[9px] font-semibold tracking-[0.28em] text-slate-400">
+                Control Center  -  v1.2.1
           </div>
         </div>
 
