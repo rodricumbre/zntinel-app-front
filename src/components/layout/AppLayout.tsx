@@ -6,7 +6,6 @@ import Logo from "@/assets/ICO.png";
 
 
 import {
-  Shield,
   BarChart2,
   Globe2,
   Users,
@@ -28,7 +27,6 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { label: "Dashboard", path: "/dashboard", icon: Shield },
   { label: "Dominios", path: "/clients", icon: Globe2 },
   { label: "Uso de cuenta", path: "/account-usage", icon: BarChart2 },
   { label: "Miembros", path: "/members", icon: Users },
@@ -68,19 +66,16 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
         {/* Brand */}
         <div className="h-16 px-5 flex items-center border-b border-slate-900/90">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-sky-500 via-cyan-400 to-indigo-400 flex items-center justify-center shadow-[0_0_32px_rgba(56,189,248,0.55)]">
-              <Shield className="w-4 h-4 text-slate-950" />
-            </div>
-            <div>
-              <div className="text-[11px] font-semibold tracking-[0.28em] text-slate-400">
-                ZNTINEL
-              </div>
-              <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-sky-500 via-cyan-400 to-indigo-400 flex items-center justify-center shadow-[0_0_32px_rgba(56,189,248,0.55)]">
+           <div className="h-8 w-8 flex items-center justify-center shadow-[0_0_32px_rgba(56,189,248,0.55)]">
                 <img
                   src={Logo}
                   className="w-4 h-4"
                   alt="Zntinel logo"
                 />
+              </div>
+            <div>
+              <div className="text-[11px] font-semibold tracking-[0.28em] text-slate-400">
+                ZNTINEL
               </div>
             </div>
           </div>
