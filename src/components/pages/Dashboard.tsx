@@ -183,6 +183,13 @@ const Dashboard: React.FC = () => {
     return `${code}`;
   }, [overview]);
 
+    const ttfbSeries =
+  overview?.ttfbHourly?.map(p => ({
+    bucketStart: p.bucketStart,
+    avg: p.avgTtfb ? Math.round(p.avgTtfb) : null,
+    p95: p.p95Ttfb ? Math.round(p.p95Ttfb) : null,
+  })) ?? [];
+
   useEffect(() => {
     const loadDomains = async () => {
       try {
@@ -626,6 +633,65 @@ const Dashboard: React.FC = () => {
               </div>
             )}
           </PageCard>
+          <PageCard
+  title="Latencia TTFB (últimas 24 h)"
+  subtitle="Promedio por hora y p95 (percentil 95)."
+>
+  {ttfbSeries.length === 0 ? (
+    <div className="py-10 text-sm text-slate-400">
+      No hay suficientes datos de TTFB todavía.
+    </div>
+  ) : (
+    <div className="h-64">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={ttfbSeries}>
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="rgba(148,163,184,0.18)"
+            vertical={false}
+          />
+          <XAxis
+            dataKey="bucketStart"
+            tickFormatter={formatHourLabel}
+            tick={{ fontSize: 10, fill: "#9ca3af" }}
+          />
+          <YAxis
+            tick={{ fontSize: 10, fill: "#9ca3af" }}
+            unit=" ms"
+          />
+          <Tooltip
+            contentStyle={{
+              background: "#020617",
+              border: "1px solid rgba(148,163,184,0.35)",
+              borderRadius: 12,
+              fontSize: 11,
+            }}
+          />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+
+          <Line
+            type="monotone"
+            dataKey="avg"
+            name="TTFB medio"
+            stroke="#38bdf8"
+            strokeWidth={2}
+            dot={false}
+          />
+
+          <Line
+            type="monotone"
+            dataKey="p95"
+            name="TTFB p95"
+            stroke="#fb7185"
+            strokeWidth={2}
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )}
+</PageCard>
+
         </div>
 
         {/* Columna derecha */}
