@@ -65,14 +65,12 @@ const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
       <aside className="relative z-20 w-60 h-full flex-shrink-0 border-r border-slate-900/90 bg-[#050816]/95 backdrop-blur-xl flex flex-col">
         {/* Brand */}
         <div className="h-16 px-5 flex items-center border-b border-slate-900/90">
-          <div className="flex items-center gap-2">
-           <div className="h-8 w-8 flex items-center justify-center shadow-[0_0_32px_rgba(56,189,248,0.55)]">
-                <img
-                  src={Logo}
-                  className="w-4 h-4"
-                  alt="Zntinel logo"
-                />
-              </div>
+          <div className="flex items-center gap-3">
+            <img
+              src={Logo}
+              alt="Zntinel"
+              className="h-7 w-auto select-none pointer-events-none"
+            />
             <div>
               <div className="text-[11px] font-semibold tracking-[0.28em] text-slate-400">
                 ZNTINEL
