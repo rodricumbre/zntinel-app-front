@@ -368,9 +368,10 @@ const Dashboard: React.FC = () => {
 
                 <div className="flex items-baseline gap-2">
                   <span className="text-3xl font-semibold text-slate-50">
-                    {overview?.security.score != null
-                      ? Math.round(overview.security.score)
-                      : "—"}
+                    const avgTtfb =
+                      overview?.totals && overview.totals.avgTtfbMs != null
+                        ? Math.round(overview.totals.avgTtfbMs)
+                        : null;
                   </span>
                   <span className="text-xs text-slate-400">
                     / 100 · Score de seguridad
