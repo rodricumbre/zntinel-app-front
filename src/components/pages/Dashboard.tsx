@@ -152,6 +152,24 @@ const Dashboard: React.FC = () => {
     [domains, selectedDomainId]
   );
 
+  // etiqueta para el page load
+  const pageLoadLabel = useMemo(() => {
+    if (!overview || overview.totals.avgTtfbMs == null) return "Sin datos";
+
+    const t = overview.totals.avgTtfbMs;
+    const rounded = Math.round(t);
+
+    if (t <= 300) return `${rounded} ms (muy rápido)`;
+    if (t <= 800) return `${rounded} ms (rápido)`;
+    if (t <= 1500) return `${rounded} ms (aceptable)`;
+    return `${rounded} ms (lento)`;
+  }, [overview]);
+
+  const securityScore = useMemo(() => {
+    if (!overview || overview.security.score == null) return null;
+    return Math.round(overview.security.score);
+  }, [overview]);
+
   useEffect(() => {
     const loadDomains = async () => {
       try {
@@ -234,7 +252,6 @@ const Dashboard: React.FC = () => {
         }
       );
 
-      // recargamos overview después del ping
       const res = await fetch(
         `${API_BASE}/domains/${selectedDomainId}/metrics/overview`,
         { credentials: "include" }
@@ -368,10 +385,7 @@ const Dashboard: React.FC = () => {
 
                 <div className="flex items-baseline gap-2">
                   <span className="text-3xl font-semibold text-slate-50">
-                    const avgTtfb =
-                      overview?.totals && overview.totals.avgTtfbMs != null
-                        ? Math.round(overview.totals.avgTtfbMs)
-                        : null;
+                    {securityScore != null ? securityScore : "—"}
                   </span>
                   <span className="text-xs text-slate-400">
                     / 100 · Score de seguridad
@@ -491,23 +505,25 @@ const Dashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* rango de tiempo */}
+                {/* rango de tiempo + page load */}
                 <div className="text-[11px] text-slate-500">
-  Page load estimado:{" "}
-  <span className="text-slate-100">{pageLoadLabel}</span>{" "}
-  · basado en origen, latencia y peticiones de comprobación de Zntinel.
-  {overview && (
-    <>
-      <br />
-      Ventana analizada:{" "}
-      <span className="text-slate-300">
-        {formatDateTimeShort(overview.from)} –{" "}
-        {formatDateTimeShort(overview.to)}
-      </span>
-    </>
-  )}
-</div>
-
+                  Page load estimado:{" "}
+                  <span className="text-slate-100">
+                    {pageLoadLabel}
+                  </span>{" "}
+                  · basado en origen, latencia y peticiones de
+                  comprobación de Zntinel.
+                  {overview && (
+                    <>
+                      <br />
+                      Ventana analizada:{" "}
+                      <span className="text-slate-300">
+                        {formatDateTimeShort(overview.from)} –{" "}
+                        {formatDateTimeShort(overview.to)}
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </PageCard>
