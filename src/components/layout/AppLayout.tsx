@@ -2,7 +2,7 @@
 import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { getPlanLabel, getPlanDetail } from "@/utils/plan";
-import Logo from "@/assets/zntinel-logo.svg";
+import Logo from "@/assets/ICO.png";
 
 
 import {
