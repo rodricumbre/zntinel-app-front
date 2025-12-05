@@ -909,6 +909,73 @@ const Dashboard: React.FC = () => {
               </div>
             )}
           </PageCard>
+          {overview && (
+  <PageCard
+    title="Incidencias y recomendaciones"
+    subtitle="Resumen de eventos que pueden impactar en la seguridad o disponibilidad."
+  >
+    {overview.topIssues.length === 0 ? (
+      <div className="py-4 text-xs text-slate-400">
+        No se han detectado incidencias relevantes en la ventana analizada.
+      </div>
+    ) : (
+      <div className="space-y-2 text-xs">
+        {overview.topIssues.map((issue) => {
+          const severityClasses =
+            issue.severity === "critical"
+              ? "border-red-500/60 bg-red-500/10 text-red-200"
+              : issue.severity === "high"
+              ? "border-orange-500/60 bg-orange-500/10 text-orange-200"
+              : issue.severity === "medium"
+              ? "border-amber-500/60 bg-amber-500/10 text-amber-200"
+              : "border-sky-500/50 bg-sky-500/10 text-sky-100";
+
+          const severityLabel =
+            issue.severity === "critical"
+              ? "Crítico"
+              : issue.severity === "high"
+              ? "Alto"
+              : issue.severity === "medium"
+              ? "Medio"
+              : "Bajo";
+
+          return (
+            <div
+              key={issue.id}
+              className="flex items-start gap-3 rounded-xl border border-slate-800/70 bg-slate-950/80 px-3 py-2.5"
+            >
+              <div
+                className={`mt-0.5 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${severityClasses}`}
+              >
+                {severityLabel}
+              </div>
+              <div className="flex-1">
+                <div className="text-[11px] text-slate-200">
+                  {issue.title}
+                </div>
+                <div className="mt-0.5 text-[10px] text-slate-500">
+                  Categoría:{" "}
+                  <span className="text-slate-300">
+                    {issue.category}
+                  </span>{" "}
+                  · Detectado:{" "}
+                  <span className="text-slate-300">
+                    {new Date(issue.detectedAt).toLocaleString("es-ES", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </PageCard>
+)}
         </div>
       </div>
     </div>
