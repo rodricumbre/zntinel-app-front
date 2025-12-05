@@ -152,7 +152,11 @@ const Dashboard: React.FC = () => {
     [domains, selectedDomainId]
   );
 
-  // etiqueta para el page load
+  const securityScore = useMemo(() => {
+    if (!overview || overview.security.score == null) return null;
+    return Math.round(overview.security.score);
+  }, [overview]);
+
   const pageLoadLabel = useMemo(() => {
     if (!overview || overview.totals.avgTtfbMs == null) return "Sin datos";
 
@@ -165,9 +169,18 @@ const Dashboard: React.FC = () => {
     return `${rounded} ms (lento)`;
   }, [overview]);
 
-  const securityScore = useMemo(() => {
-    if (!overview || overview.security.score == null) return null;
-    return Math.round(overview.security.score);
+  const lastStatusLabel = useMemo(() => {
+    if (!overview || overview.totals.lastStatusCode == null) {
+      return "Sin datos";
+    }
+
+    const code = overview.totals.lastStatusCode;
+    const ok = overview.totals.lastOk;
+
+    if (ok) return `${code} (OK)`;
+    if (code >= 500) return `${code} (error servidor)`;
+    if (code >= 400) return `${code} (error aplicación / WAF)`;
+    return `${code}`;
   }, [overview]);
 
   useEffect(() => {
@@ -290,7 +303,6 @@ const Dashboard: React.FC = () => {
         subtitle="Monitorización continua de tus dominios protegidos por Zntinel."
       >
         <div className="flex flex-col gap-4">
-          {/* Selección de dominio */}
           <div className="flex flex-wrap items-center gap-2">
             {loadingDomains && !domains.length && (
               <span className="text-xs text-slate-400">
@@ -372,7 +384,7 @@ const Dashboard: React.FC = () => {
 
       {/* GRID PRINCIPAL */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Columna izquierda: estado global + uptime */}
+        {/* Columna izquierda */}
         <div className="space-y-6 xl:col-span-2">
           {/* Estado global */}
           <PageCard>
@@ -450,6 +462,27 @@ const Dashboard: React.FC = () => {
                         : "Sin datos"}
                     </span>
                   </span>
+                  <span>
+                    Último estado HTTP:{" "}
+                    <span className="text-slate-100">
+                      {lastStatusLabel}
+                    </span>
+                  </span>
+                  <span>
+                    Errores 4xx:{" "}
+                    <span className="text-slate-100">
+                      {overview?.totals.http4xxErrors ?? 0}
+                    </span>{" "}
+                    · 5xx:{" "}
+                    <span className="text-slate-100">
+                      {overview?.totals.http5xxErrors ?? 0}
+                    </span>{" "}
+                    · Timeouts/red:{" "}
+                    <span className="text-slate-100">
+                      {(overview?.totals.timeoutErrors ?? 0) +
+                        (overview?.totals.networkErrors ?? 0)}
+                    </span>
+                  </span>
                 </div>
               </div>
 
@@ -505,7 +538,6 @@ const Dashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* rango de tiempo + page load */}
                 <div className="text-[11px] text-slate-500">
                   Page load estimado:{" "}
                   <span className="text-slate-100">
@@ -528,7 +560,7 @@ const Dashboard: React.FC = () => {
             </div>
           </PageCard>
 
-          {/* UPTIME / LÍNEA */}
+          {/* Uptime */}
           <PageCard
             title="Disponibilidad y rendimiento (últimas 24 h)"
             subtitle="Uptime por hora y ventanas de degradación."
@@ -596,9 +628,8 @@ const Dashboard: React.FC = () => {
           </PageCard>
         </div>
 
-        {/* Columna derecha: tráfico + email security */}
+        {/* Columna derecha */}
         <div className="space-y-6">
-          {/* Tráfico */}
           <PageCard
             title="Tráfico y WAF (últimas 24 h)"
             subtitle="Volumen total, bloqueos y bots por hora."
@@ -731,7 +762,6 @@ const Dashboard: React.FC = () => {
             )}
           </PageCard>
 
-          {/* Seguridad de correo / DNS */}
           <PageCard
             title="Seguridad de correo y DNS"
             subtitle={
