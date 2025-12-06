@@ -1,7 +1,6 @@
 // src/components/pages/Login.tsx
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "@/lib/auth";
 import { useLanguage } from "@/lib/language";
 
 const API_BASE_URL =
@@ -12,46 +11,66 @@ type Lang = "es" | "en";
 const copy = {
   es: {
     title: "Inicia sesión",
+    titleMfa: "Introduce tu código MFA",
     subtitle:
       "Controla tu WAF gestionado, bloquea bots y revisa métricas de seguridad en tiempo real.",
     emailLabel: "Email",
     passwordLabel: "Password",
+    mfaLabel: "Código de 6 dígitos",
     emailPlaceholder: "tucorreo@empresa.com",
     passwordPlaceholder: "••••••••",
+    mfaPlaceholder: "000000",
     button: "Entrar",
     buttonLoading: "Entrando...",
+    buttonMfa: "Verificar código",
+    buttonMfaLoading: "Verificando...",
+    backToLogin: "Volver a introducir email y contraseña",
     errorEmpty: "Introduce email y contraseña.",
     errorGeneric: "Credenciales inválidas o error de servidor",
+    errorMfaGeneric: "Código MFA inválido o expirado",
     footerLeft: "Control Center · v1.0",
     footerRight: "TLS · WAF · Bots · Logs",
   },
   en: {
     title: "Log in",
+    titleMfa: "Enter your MFA code",
     subtitle:
       "Control your managed WAF, block bots and review security metrics in real time.",
     emailLabel: "Email",
     passwordLabel: "Password",
+    mfaLabel: "6-digit code",
     emailPlaceholder: "you@company.com",
     passwordPlaceholder: "••••••••",
+    mfaPlaceholder: "000000",
     button: "Log in",
     buttonLoading: "Logging in...",
+    buttonMfa: "Verify code",
+    buttonMfaLoading: "Verifying...",
+    backToLogin: "Back to email & password",
     errorEmpty: "Enter email and password.",
     errorGeneric: "Invalid credentials or server error",
+    errorMfaGeneric: "Invalid or expired MFA code",
     footerLeft: "Control Center · v1.0",
     footerRight: "TLS · WAF · Bots · Logs",
   },
 } as const;
 
+type Step = "login" | "mfa";
+
 const Login: React.FC = () => {
+  const [step, setStep] = useState<Step>("login");
+  const [challengeId, setChallengeId] = useState<string | null>(null);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { lang, setLang } = useLanguage();
   const t = copy[lang];
 
-  const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -66,7 +85,30 @@ const Login: React.FC = () => {
     }
   }, [location.search]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function finishLogin() {
+    // Si viene de invitación, aceptamos la invitación para esa org
+    if (inviteToken) {
+      try {
+        await fetch(`${API_BASE_URL}/auth/accept-invite-existing`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ token: inviteToken }),
+        });
+        // Si falla, no bloqueamos el acceso
+      } catch (e) {
+        console.error("Error aceptando invitación existente", e);
+      }
+    }
+
+    // Aquí ya tenemos la cookie "session" creada por la API,
+    // el resto del app puede tirar de /auth/me cuando cargue el layout.
+    navigate("/dashboard");
+  }
+
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const sanitizedEmail = email.trim().toLowerCase();
@@ -81,30 +123,80 @@ const Login: React.FC = () => {
     setError(null);
 
     try {
-      // Login normal
-      await login(sanitizedEmail, sanitizedPassword);
+      const res = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: sanitizedEmail,
+          password: sanitizedPassword,
+        }),
+      });
 
-      // Si viene de invitación, aceptamos la invitación para esa org
-      if (inviteToken) {
-        try {
-          await fetch(`${API_BASE_URL}/auth/accept-invite-existing`, {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ token: inviteToken }),
-          });
-          // aunque falle, no bloqueamos el acceso al panel
-        } catch (e) {
-          console.error("Error aceptando invitación existente", e);
-        }
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        console.error("[LOGIN] error response:", data);
+        setError(t.errorGeneric);
+        return;
       }
 
-      navigate("/dashboard");
+      // Si no requiere MFA → ya ha creado la sesión, vamos directos al panel
+      if (!data.mfaRequired) {
+        await finishLogin();
+        return;
+      }
+
+      // Requiere MFA → guardamos challengeId y pasamos al segundo paso
+      setChallengeId(data.challengeId);
+      setStep("mfa");
+      setMfaCode("");
     } catch (err) {
-      console.error(err);
+      console.error("[LOGIN] network error:", err);
       setError(t.errorGeneric);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!challengeId) return;
+
+    const code = mfaCode.trim();
+    if (!code) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/mfa/verify-login`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          challengeId,
+          code,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success || !data.mfaVerified) {
+        console.error("[MFA] error response:", data);
+        setError(t.errorMfaGeneric);
+        return;
+      }
+
+      // Aquí la API ya ha creado la cookie de sesión definitiva
+      await finishLogin();
+    } catch (err) {
+      console.error("[MFA] network error:", err);
+      setError(t.errorMfaGeneric);
     } finally {
       setLoading(false);
     }
@@ -151,56 +243,109 @@ const Login: React.FC = () => {
               ZNTINEL
             </div>
             <h1 className="mt-3 text-2xl font-semibold text-slate-50">
-              {t.title}
+              {step === "login" ? t.title : t.titleMfa}
             </h1>
             <p className="mt-2 text-xs leading-relaxed text-slate-400">
               {t.subtitle}
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-400">
-                {t.emailLabel}
-              </label>
-              <input
-                type="email"
-                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none ring-0 transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/60"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                placeholder={t.emailPlaceholder}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium text-slate-400">
-                {t.passwordLabel}
-              </label>
-              <input
-                type="password"
-                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none ring-0 transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/60"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                placeholder={t.passwordPlaceholder}
-              />
-            </div>
-
-            {error && (
-              <div className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-xs text-red-300">
-                {error}
+          {step === "login" && (
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-400">
+                  {t.emailLabel}
+                </label>
+                <input
+                  type="email"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none ring-0 transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/60"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  placeholder={t.emailPlaceholder}
+                />
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-2 w-full rounded-xl bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? t.buttonLoading : t.button}
-            </button>
-          </form>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-400">
+                  {t.passwordLabel}
+                </label>
+                <input
+                  type="password"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none ring-0 transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/60"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  placeholder={t.passwordPlaceholder}
+                />
+              </div>
+
+              {error && (
+                <div className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="mt-2 w-full rounded-xl bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? t.buttonLoading : t.button}
+              </button>
+            </form>
+          )}
+
+          {step === "mfa" && (
+            <form onSubmit={handleMfaSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium text-slate-400">
+                  {t.mfaLabel}
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none ring-0 transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/60 tracking-[0.35em] text-center"
+                  value={mfaCode}
+                  onChange={(e) =>
+                    setMfaCode(
+                      e.target.value.replace(/\D/g, "").slice(0, 6)
+                    )
+                  }
+                  placeholder={t.mfaPlaceholder}
+                  autoFocus
+                />
+              </div>
+
+              {error && (
+                <div className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-xs text-red-300">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading || mfaCode.length !== 6}
+                className="mt-2 w-full rounded-xl bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading ? t.buttonMfaLoading : t.buttonMfa}
+              </button>
+
+              <button
+                type="button"
+                className="w-full text-[11px] text-slate-400 underline mt-2"
+                onClick={() => {
+                  setStep("login");
+                  setChallengeId(null);
+                  setMfaCode("");
+                  setError(null);
+                }}
+              >
+                {t.backToLogin}
+              </button>
+            </form>
+          )}
 
           {/* mini texto de confianza */}
           <div className="mt-4 flex items-center justify-between text-[10px] text-slate-500">
