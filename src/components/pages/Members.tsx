@@ -1,4 +1,3 @@
-// src/pages/Members.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Users,
@@ -14,8 +13,11 @@ import {
   Filter,
   UserCheck,
   UserX,
+  X,               // ⬅ nuevo
 } from "lucide-react";
 import PageCard from "@/components/layout/PageCard";
+import { useAuth } from "@/lib/auth";   // ⬅ nuevo
+
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ?? "https://api.zntinel.com";
@@ -53,6 +55,18 @@ const MembersPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleId | "all">("all");
+  const { user } = useAuth();
+
+// --- estado MFA personal ---
+const [mfaStatus, setMfaStatus] = useState<{ enabled: boolean } | null>(null);
+const [mfaLoading, setMfaLoading] = useState(false);
+const [mfaModalOpen, setMfaModalOpen] = useState(false);
+const [mfaQrSvg, setMfaQrSvg] = useState<string | null>(null);
+const [mfaSecret, setMfaSecret] = useState<string | null>(null);
+const [mfaCode, setMfaCode] = useState("");
+const [mfaError, setMfaError] = useState<string | null>(null);
+const [mfaStep, setMfaStep] = useState<"idle" | "init" | "verify">("idle");
+
 
   useEffect(() => {
     const load = async () => {
@@ -81,6 +95,115 @@ const MembersPage: React.FC = () => {
 
     load();
   }, []);
+
+
+// Cargar si el usuario actual tiene MFA activo
+useEffect(() => {
+  const loadMfaStatus = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/mfa/status`, {
+        credentials: "include",
+      });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (data.success) {
+        setMfaStatus({ enabled: !!data.enabled });
+      }
+    } catch (e) {
+      console.log("[MFA] status error", e);
+    }
+  };
+
+  loadMfaStatus();
+}, []);
+
+
+const openMfaModal = async () => {
+  try {
+    setMfaLoading(true);
+    setMfaError(null);
+    setMfaModalOpen(true);
+    setMfaStep("init");
+
+    const res = await fetch(`${API_BASE}/auth/mfa/init`, {
+      method: "POST",
+      credentials: "include",
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "No se pudo iniciar la configuración MFA");
+    }
+
+    setMfaQrSvg(data.qr_svg ?? null);
+    setMfaSecret(data.secret ?? null);
+    setMfaStep("verify");
+  } catch (e: any) {
+    console.error("[MFA] init error:", e);
+    setMfaError(e?.message || "Error iniciando la configuración MFA.");
+  } finally {
+    setMfaLoading(false);
+  }
+};
+
+const verifyMfa = async () => {
+  if (!mfaCode.trim()) return;
+  try {
+    setMfaLoading(true);
+    setMfaError(null);
+
+    const res = await fetch(`${API_BASE}/auth/mfa/verify`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: mfaCode.trim() }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "Código incorrecto, inténtalo de nuevo.");
+    }
+
+    setMfaStatus({ enabled: true });
+    setMfaModalOpen(false);
+    setMfaCode("");
+    setMfaQrSvg(null);
+    setMfaSecret(null);
+    setMfaStep("idle");
+  } catch (e: any) {
+    console.error("[MFA] verify error:", e);
+    setMfaError(e?.message || "No se pudo verificar el código.");
+  } finally {
+    setMfaLoading(false);
+  }
+};
+
+const disableMfa = async () => {
+  try {
+    setMfaLoading(true);
+    setMfaError(null);
+
+    const res = await fetch(`${API_BASE}/auth/mfa/disable`, {
+      method: "POST",
+      credentials: "include",
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || "No se pudo desactivar MFA.");
+    }
+
+    setMfaStatus({ enabled: false });
+  } catch (e: any) {
+    console.error("[MFA] disable error:", e);
+    setMfaError(e?.message || "Error al desactivar MFA.");
+  } finally {
+    setMfaLoading(false);
+  }
+};
+
+
 
   const filteredMembers = useMemo(() => {
     return members.filter((m) => {
@@ -314,6 +437,79 @@ const MembersPage: React.FC = () => {
           </div>
         </div>
       </PageCard>
+      {user && (
+  <PageCard
+    title="MFA para tu cuenta"
+    subtitle="Protege el acceso al panel con un segundo factor (TOTP, Google Authenticator, etc.)."
+  >
+    <div className="flex flex-col md:flex-row md:items-center gap-3 text-sm">
+      <div className="flex-1 space-y-1">
+        <p className="text-slate-200">
+          Estás autenticado como{" "}
+          <span className="font-semibold text-sky-200">
+            {user.first_name || user.last_name
+              ? `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim()
+              : user.email}
+          </span>
+          .
+        </p>
+        <p className="text-slate-400 text-xs">
+          Activar MFA añade una capa adicional sobre usuario/contraseña. Cada
+          vez que accedas al Control Center, Zntinel te pedirá un código de 6
+          dígitos generado en tu app de autenticación.
+        </p>
+        {mfaStatus?.enabled ? (
+          <p className="text-xs text-emerald-300 flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            MFA está actualmente{" "}
+            <span className="font-semibold">activado</span> en tu cuenta.
+          </p>
+        ) : (
+          <p className="text-xs text-amber-300 flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5" />
+            MFA todavía{" "}
+            <span className="font-semibold">no está configurado</span> en tu
+            usuario. Es muy recomendable activarlo.
+          </p>
+        )}
+        {mfaError && (
+          <p className="text-[11px] text-rose-300 flex items-center gap-1.5">
+            <AlertTriangle className="w-3 h-3" /> {mfaError}
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col items-start gap-2">
+        {!mfaStatus?.enabled ? (
+          <button
+            type="button"
+            onClick={openMfaModal}
+            disabled={mfaLoading}
+            className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/70 bg-emerald-500/10 px-3 py-1.5 text-[11px] text-emerald-100 hover:bg-emerald-500/20 transition disabled:opacity-60"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            {mfaLoading ? "Iniciando..." : "Configurar MFA ahora"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={disableMfa}
+            disabled={mfaLoading}
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] text-slate-200 hover:border-rose-500/70 hover:text-rose-200 hover:bg-slate-900/90 transition disabled:opacity-60"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            {mfaLoading ? "Actualizando..." : "Desactivar MFA"}
+          </button>
+        )}
+        <span className="text-[10px] text-slate-500 max-w-xs">
+          Solo afecta a tu usuario. La adopción global se sigue midiendo en el
+          gráfico superior de “Adopción 2FA”.
+        </span>
+      </div>
+    </div>
+  </PageCard>
+)}
+
 
       {/* Resumen de asientos y seguridad */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
@@ -616,6 +812,114 @@ const MembersPage: React.FC = () => {
           </div>
         </div>
       </PageCard>
+      {/* Modal MFA */}
+{mfaModalOpen && (
+  <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
+    <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950/95 p-5 shadow-2xl">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-100">
+            Configurar MFA (TOTP)
+          </h2>
+          <p className="text-[11px] text-slate-400">
+            Escanea el código QR con tu app de autenticación y luego introduce
+            un código de 6 dígitos para activarlo.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="rounded-full border border-slate-700 p-1 text-slate-400 hover:text-slate-100 hover:border-slate-500"
+          onClick={() => {
+            setMfaModalOpen(false);
+            setMfaCode("");
+            setMfaQrSvg(null);
+            setMfaSecret(null);
+            setMfaStep("idle");
+            setMfaError(null);
+          }}
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {mfaStep === "init" && (
+        <div className="py-6 text-center text-sm text-slate-400">
+          Iniciando configuración MFA...
+        </div>
+      )}
+
+      {mfaStep === "verify" && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-center">
+            {mfaQrSvg ? (
+              <div
+                className="p-2 bg-slate-900 rounded-xl"
+                dangerouslySetInnerHTML={{ __html: mfaQrSvg }}
+              />
+            ) : (
+              <div className="text-xs text-slate-400">
+                Escanea el QR proporcionado por la API.
+              </div>
+            )}
+          </div>
+
+          {mfaSecret && (
+            <p className="text-[11px] text-slate-500 text-center">
+              Si no puedes escanear el código, añade manualmente esta clave en
+              tu app:{" "}
+              <span className="font-mono text-slate-100">{mfaSecret}</span>
+            </p>
+          )}
+
+          <div className="space-y-2">
+            <label className="text-[11px] text-slate-300">
+              Introduce un código de 6 dígitos generado por tu app
+            </label>
+            <input
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value)}
+              maxLength={6}
+              placeholder="000000"
+              className="w-full rounded-lg bg-slate-950 border border-slate-800 px-3 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-emerald-400/70 focus:ring-1 focus:ring-emerald-500/50 tracking-[0.3em] text-center font-mono"
+            />
+          </div>
+
+          {mfaError && (
+            <p className="text-[11px] text-rose-300 flex items-center gap-1.5">
+              <AlertTriangle className="w-3 h-3" /> {mfaError}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                setMfaModalOpen(false);
+                setMfaCode("");
+                setMfaQrSvg(null);
+                setMfaSecret(null);
+                setMfaStep("idle");
+                setMfaError(null);
+              }}
+              className="text-[11px] px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:bg-slate-900"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={mfaLoading || mfaCode.trim().length < 6}
+              onClick={verifyMfa}
+              className="text-[11px] px-3 py-1.5 rounded-full border border-emerald-500/70 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20 disabled:opacity-60"
+            >
+              {mfaLoading ? "Verificando..." : "Activar MFA"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
     </div>
   );
 };
