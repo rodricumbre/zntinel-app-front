@@ -1,97 +1,92 @@
 // src/components/pages/AccountUsage.tsx
-import React, { useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import PageCard from "@/components/layout/PageCard";
 
-type ClientUsage = {
-  name: string;
-  requests: number;
-  maliciousPct: number;       // 0–1
-  attacksBlocked: number;
-  bandwidthSavedGB: number;
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "https://api.zntinel.com";
+
+type AccountUsageApi = {
+  success: boolean;
+  account: {
+    id: string;
+    name: string;
+    plan: string;
+    status: string;
+    extra_seat_packs: number;
+  };
+  seats: {
+    used: number;
+    max: number;
+    base: number;
+    extraPacks: number;
+  };
+  members: {
+    total: number;
+    owners: number;
+    admins: number;
+    members: number;
+    pendingInvites: number;
+  };
+  mfa: {
+    enabled: number;
+    total: number;
+    adoptionPct: number; // 0–100
+  };
 };
 
-const clientsUsageMock: ClientUsage[] = [
-  {
-    name: "Tienda Uno",
-    requests: 3_200_000,
-    maliciousPct: 0.11,
-    attacksBlocked: 352_000,
-    bandwidthSavedGB: 210,
-  },
-  {
-    name: "Agencia Web",
-    requests: 2_450_000,
-    maliciousPct: 0.07,
-    attacksBlocked: 171_500,
-    bandwidthSavedGB: 96,
-  },
-  {
-    name: "Clínica Sol",
-    requests: 1_980_000,
-    maliciousPct: 0.09,
-    attacksBlocked: 178_000,
-    bandwidthSavedGB: 132,
-  },
-  {
-    name: "GymX",
-    requests: 1_350_000,
-    maliciousPct: 0.05,
-    attacksBlocked: 67_500,
-    bandwidthSavedGB: 74,
-  },
-];
-
 const AccountUsagePage: React.FC = () => {
-  const summary = useMemo(() => {
-    const totalRequests = clientsUsageMock.reduce(
-      (acc, c) => acc + c.requests,
-      0
-    );
-    const totalAttacks = clientsUsageMock.reduce(
-      (acc, c) => acc + c.attacksBlocked,
-      0
-    );
-    const totalBandwidthSaved = clientsUsageMock.reduce(
-      (acc, c) => acc + c.bandwidthSavedGB,
-      0
-    );
+  const [usage, setUsage] = useState<AccountUsageApi | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-    const maliciousPctGlobal =
-      totalRequests > 0 ? totalAttacks / totalRequests : 0;
+  useEffect(() => {
+    let cancelled = false;
 
-    // mocks de comparación inter-mensual
-    const prevMonthRequests = totalRequests * 0.86;
-    const prevMonthAttacks = totalAttacks * 0.91;
-    const prevMonthSaved = totalBandwidthSaved * 0.8;
+    async function load() {
+      setLoading(true);
+      setError(null);
 
-    const reqDeltaPct =
-      prevMonthRequests > 0
-        ? ((totalRequests - prevMonthRequests) / prevMonthRequests) * 100
-        : 0;
-    const atkDeltaPct =
-      prevMonthAttacks > 0
-        ? ((totalAttacks - prevMonthAttacks) / prevMonthAttacks) * 100
-        : 0;
-    const savedDeltaPct =
-      prevMonthSaved > 0
-        ? ((totalBandwidthSaved - prevMonthSaved) / prevMonthSaved) * 100
-        : 0;
+      try {
+        const res = await fetch(`${API_BASE_URL}/account/usage`, {
+          method: "GET",
+          credentials: "include",
+        });
 
-    return {
-      totalRequests,
-      totalAttacks,
-      totalBandwidthSaved,
-      maliciousPctGlobal,
-      reqDeltaPct,
-      atkDeltaPct,
-      savedDeltaPct,
+        const data = (await res.json()) as AccountUsageApi;
+
+        if (!res.ok || !data.success) {
+          throw new Error(
+            (data as any)?.error || `HTTP ${res.status} en /account/usage`
+          );
+        }
+
+        if (!cancelled) {
+          setUsage(data);
+        }
+      } catch (e: any) {
+        console.error("[ACCOUNT_USAGE] error:", e);
+        if (!cancelled) {
+          setError(
+            e?.message || "Error cargando el uso de la cuenta"
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
-  const fmtMillions = (n: number) => (n / 1_000_000).toFixed(1) + "M";
-  const fmtPct = (v: number) => (v * 100).toFixed(1) + "%";
-  const fmtDelta = (n: number) =>
-    `${n >= 0 ? "+" : ""}${n.toFixed(1)}% vs mes anterior`;
+  const fmtPct = (n: number | undefined) =>
+    typeof n === "number" ? `${n.toFixed(0)}%` : "–";
+
+  const fmtSeats = (used: number, max: number) => `${used} / ${max} asientos`;
 
   return (
     <div className="space-y-6">
@@ -100,112 +95,138 @@ const AccountUsagePage: React.FC = () => {
           Account Usage
         </h1>
         <p className="text-sm text-slate-400">
-          Visión global de tráfico inspeccionado, ataques bloqueados y ahorro
-          de recursos en tu cuenta.
+          Visión global de asientos, miembros y seguridad de acceso para tu cuenta.
         </p>
       </div>
 
-      {/* cards superiores con métricas de verdad */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {loading && (
         <PageCard>
-          <div className="text-xs uppercase tracking-[0.14em] text-slate-400 mb-2">
-            Tráfico inspeccionado este mes
-          </div>
-          <div className="text-3xl font-semibold text-slate-50 mb-1">
-            {fmtMillions(summary.totalRequests)}
-          </div>
-          <p className="text-xs text-slate-400">
-            {fmtDelta(summary.reqDeltaPct)}
-          </p>
-          <p className="mt-2 text-[11px] text-slate-500">
-            Incluye todo el tráfico HTTP/HTTPS que atraviesa Zntinel para
-            este tenant.
+          <p className="text-sm text-slate-400">Cargando uso de la cuenta…</p>
+        </PageCard>
+      )}
+
+      {error && !loading && (
+        <PageCard>
+          <p className="text-sm text-red-400">
+            {error}
           </p>
         </PageCard>
+      )}
 
-        <PageCard>
-          <div className="text-xs uppercase tracking-[0.14em] text-slate-400 mb-2">
-            Ataques bloqueados
-          </div>
-          <div className="text-3xl font-semibold text-emerald-400 mb-1">
-            {fmtMillions(summary.totalAttacks)}
-          </div>
-          <p className="text-xs text-slate-400">
-            {fmtPct(summary.maliciousPctGlobal)} del tráfico total clasificado
-            como malicioso (WAF + Bot Management).
-          </p>
-          <p className="mt-2 text-[11px] text-slate-500">
-            Incluye firmas WAF, reglas personalizadas, protección L7 y
-            mitigación de bots.
-          </p>
-        </PageCard>
+      {usage && !loading && !error && (
+        <>
+          {/* Cards superiores basadas en /account/usage REAL */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <PageCard>
+              <div className="text-xs uppercase tracking-[0.14em] text-slate-400 mb-2">
+                Asientos y miembros
+              </div>
+              <div className="text-3xl font-semibold text-slate-50 mb-1">
+                {fmtSeats(usage.seats.used, usage.seats.max)}
+              </div>
+              <p className="text-xs text-slate-400">
+                Plan <span className="font-semibold">{usage.account.plan}</span>{" "}
+                · base: {usage.seats.base} · packs extra:{" "}
+                {usage.seats.extraPacks}
+              </p>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Controla cuántos usuarios activos tienes frente a la capacidad
+                total permitida por tu plan.
+              </p>
+            </PageCard>
 
-        <PageCard>
-          <div className="text-xs uppercase tracking-[0.14em] text-slate-400 mb-2">
-            Ahorro de recursos
-          </div>
-          <div className="text-3xl font-semibold text-sky-400 mb-1">
-            {summary.totalBandwidthSaved.toFixed(0)} GB
-          </div>
-          <p className="text-xs text-slate-400">
-            {fmtDelta(summary.savedDeltaPct)}
-          </p>
-          <p className="mt-2 text-[11px] text-slate-500">
-            Ancho de banda y peticiones a origen evitadas gracias al caché,
-            rate limiting y bloqueo precoz de ataques.
-          </p>
-        </PageCard>
-      </div>
+            <PageCard>
+              <div className="text-xs uppercase tracking-[0.14em] text-slate-400 mb-2">
+                Seguridad de acceso (MFA)
+              </div>
+              <div className="text-3xl font-semibold text-emerald-400 mb-1">
+                {fmtPct(usage.mfa.adoptionPct)}
+              </div>
+              <p className="text-xs text-slate-400">
+                {usage.mfa.enabled} de {usage.mfa.total} usuarios tienen MFA
+                activado.
+              </p>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Un mayor porcentaje de MFA reduce el riesgo de accesos
+                comprometidos al Control Center.
+              </p>
+            </PageCard>
 
-      {/* tabla detallada por cliente */}
-      <PageCard
-        title="Uso detallado por cliente"
-        subtitle="Distribución de tráfico, ataques y ahorro de recursos por cada dominio/cliente gestionado."
-      >
-        <div className="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-950/60">
-          <table className="min-w-full text-xs">
-            <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800/80">
-              <tr>
-                <th className="px-4 py-2 text-left font-medium">Cliente</th>
-                <th className="px-4 py-2 text-left font-medium">
-                  Requests inspeccionadas
-                </th>
-                <th className="px-4 py-2 text-left font-medium">
-                  % tráfico malicioso
-                </th>
-                <th className="px-4 py-2 text-left font-medium">
-                  Ataques bloqueados
-                </th>
-                <th className="px-4 py-2 text-left font-medium">
-                  Ancho de banda ahorrado
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {clientsUsageMock.map((c) => (
-                <tr
-                  key={c.name}
-                  className="border-b border-slate-800/70 last:border-0 hover:bg-slate-900/40 transition"
-                >
-                  <td className="px-4 py-3 text-slate-100">{c.name}</td>
-                  <td className="px-4 py-3 text-slate-200">
-                    {fmtMillions(c.requests)}
-                  </td>
-                  <td className="px-4 py-3 text-slate-200">
-                    {fmtPct(c.maliciousPct)}
-                  </td>
-                  <td className="px-4 py-3 text-slate-200">
-                    {c.attacksBlocked.toLocaleString("es-ES")}
-                  </td>
-                  <td className="px-4 py-3 text-slate-200">
-                    {c.bandwidthSavedGB.toFixed(0)} GB
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </PageCard>
+            <PageCard>
+              <div className="text-xs uppercase tracking-[0.14em] text-slate-400 mb-2">
+                Invitaciones y roles
+              </div>
+              <div className="text-3xl font-semibold text-sky-400 mb-1">
+                {usage.members.pendingInvites}
+              </div>
+              <p className="text-xs text-slate-400">
+                invitaciones pendientes · {usage.members.total} miembros
+                totales.
+              </p>
+              <p className="mt-2 text-[11px] text-slate-500">
+                Gestiona owners, admins y members para mantener el principio
+                de mínimo privilegio.
+              </p>
+            </PageCard>
+          </div>
+
+          {/* tabla/resumen de roles */}
+          <PageCard
+            title="Distribución de roles"
+            subtitle="Cómo se reparte la responsabilidad dentro de la cuenta."
+          >
+            <div className="border border-slate-800/80 rounded-xl overflow-hidden bg-slate-950/60">
+              <table className="min-w-full text-xs">
+                <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800/80">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-medium">
+                      Rol
+                    </th>
+                    <th className="px-4 py-2 text-left font-medium">
+                      Nº usuarios
+                    </th>
+                    <th className="px-4 py-2 text-left font-medium">
+                      Comentario
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-slate-800/70">
+                    <td className="px-4 py-3 text-slate-100">Owners</td>
+                    <td className="px-4 py-3 text-slate-200">
+                      {usage.members.owners}
+                    </td>
+                    <td className="px-4 py-3 text-slate-300">
+                      Acceso completo a la cuenta, facturación y cambios
+                      críticos.
+                    </td>
+                  </tr>
+                  <tr className="border-b border-slate-800/70">
+                    <td className="px-4 py-3 text-slate-100">Admins</td>
+                    <td className="px-4 py-3 text-slate-200">
+                      {usage.members.admins}
+                    </td>
+                    <td className="px-4 py-3 text-slate-300">
+                      Gestión del WAF, dominios, reglas y usuarios sin tocar
+                      facturación.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-3 text-slate-100">Members</td>
+                    <td className="px-4 py-3 text-slate-200">
+                      {usage.members.members}
+                    </td>
+                    <td className="px-4 py-3 text-slate-300">
+                      Acceso operativo limitado, ideal para desarrolladores y
+                      soporte técnico.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </PageCard>
+        </>
+      )}
     </div>
   );
 };
