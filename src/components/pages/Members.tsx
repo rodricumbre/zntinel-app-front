@@ -115,26 +115,11 @@ const [mfaStep, setMfaStep] = useState<"idle" | "init" | "verify">("idle");
 }, []);
 
 
-// Cargar si el usuario actual tiene MFA activo
 useEffect(() => {
-  const loadMfaStatus = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/auth/mfa/status`, {
-        credentials: "include",
-      });
-      if (!res.ok) return;
-
-      const data = await res.json();
-      if (data.success) {
-        setMfaStatus({ enabled: !!data.enabled });
-      }
-    } catch (e) {
-      console.log("[MFA] status error", e);
-    }
-  };
-
-  loadMfaStatus();
-}, []);
+  if (user) {
+    setMfaStatus({ enabled: !!(user as any).mfa_enabled });
+  }
+}, [user]);
 
 
 const openMfaModal = async () => {
@@ -144,7 +129,7 @@ const openMfaModal = async () => {
     setMfaModalOpen(true);
     setMfaStep("init");
 
-    const res = await fetch(`${API_BASE}/auth/mfa/init`, {
+    const res = await fetch(`${API_BASE}/auth/mfa/setup`, {
       method: "POST",
       credentials: "include",
     });
@@ -171,7 +156,7 @@ const verifyMfa = async () => {
     setMfaLoading(true);
     setMfaError(null);
 
-    const res = await fetch(`${API_BASE}/auth/mfa/verify`, {
+    const res = await fetch(`${API_BASE}/auth/mfa/confirm`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
