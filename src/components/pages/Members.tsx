@@ -66,6 +66,8 @@ const [mfaSecret, setMfaSecret] = useState<string | null>(null);
 const [mfaCode, setMfaCode] = useState("");
 const [mfaError, setMfaError] = useState<string | null>(null);
 const [mfaStep, setMfaStep] = useState<"idle" | "init" | "verify">("idle");
+const [disableConfirmOpen, setDisableConfirmOpen] = useState(false);
+
 
 
   useEffect(() => {
@@ -196,7 +198,11 @@ const disableMfa = async () => {
       throw new Error(data.error || "No se pudo desactivar MFA.");
     }
 
+    // Mantener el estado de carga 2 segundos
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
     setMfaStatus({ enabled: false });
+    setDisableConfirmOpen(false);
   } catch (e: any) {
     console.error("[MFA] disable error:", e);
     setMfaError(e?.message || "Error al desactivar MFA.");
@@ -204,7 +210,6 @@ const disableMfa = async () => {
     setMfaLoading(false);
   }
 };
-
 
 
   const filteredMembers = useMemo(() => {
@@ -918,6 +923,50 @@ const disableMfa = async () => {
           </div>
         </div>
       )}
+    </div>
+  </div>
+)}
+
+{disableConfirmOpen && (
+  <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
+    <div className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-950/95 p-5 shadow-2xl">
+      <h2 className="text-sm font-semibold text-slate-100 mb-1">
+        Desactivar MFA
+      </h2>
+      <p className="text-[12px] text-slate-300 mb-3">
+        ¿Estás seguro de que quieres desactivar el segundo factor en tu cuenta?
+        Reducirás la protección frente a accesos no autorizados.
+      </p>
+
+      {mfaError && (
+        <p className="text-[11px] text-rose-300 flex items-center gap-1.5 mb-2">
+          <AlertTriangle className="w-3 h-3" />
+          {mfaError}
+        </p>
+      )}
+
+      <div className="flex justify-end gap-2 pt-1">
+        <button
+          type="button"
+          onClick={() => {
+            if (mfaLoading) return;
+            setDisableConfirmOpen(false);
+            setMfaError(null);
+          }}
+          className="text-[11px] px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 hover:bg-slate-900 disabled:opacity-60"
+          disabled={mfaLoading}
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={disableMfa}
+          disabled={mfaLoading}
+          className="text-[11px] px-3 py-1.5 rounded-full border border-rose-500/70 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20 disabled:opacity-60"
+        >
+          {mfaLoading ? "Desactivando..." : "Sí, desactivar MFA"}
+        </button>
+      </div>
     </div>
   </div>
 )}

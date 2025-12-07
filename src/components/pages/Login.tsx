@@ -340,11 +340,13 @@ const Login: React.FC = () => {
               )}
 
               <button
-                type="submit"
+                type="button"
+                onClick={() => setDisableConfirmOpen(true)}
                 disabled={mfaLoading}
-                className="mt-2 w-full rounded-xl bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] text-slate-200 hover:border-rose-500/70 hover:text-rose-200 hover:bg-slate-900/90 transition disabled:opacity-60"
               >
-                {mfaLoading ? t.mfaButtonLoading : t.mfaButton}
+                <KeyRound className="w-3.5 h-3.5" />
+                {mfaLoading ? "Desactivando..." : "Desactivar MFA"}
               </button>
             </form>
           )}
