@@ -104,9 +104,9 @@ const Login: React.FC = () => {
       }
     }
 
-    // Para evitar líos con contextos, forzamos navegación dura
+    // Para evitar líos con contextos, navegación dura
     window.location.href = "/dashboard";
-    // Si prefieres SPA:
+    // Alternativa SPA:
     // navigate("/dashboard");
   }
 
@@ -148,7 +148,7 @@ const Login: React.FC = () => {
         return;
       }
 
-      // Si el usuario tiene MFA activado → mostramos el paso OTP
+      // Si el usuario tiene MFA activado → paso OTP
       if (data.mfaRequired && data.challengeId) {
         setChallengeId(data.challengeId as string);
         setStep("mfa");
@@ -157,7 +157,7 @@ const Login: React.FC = () => {
         return;
       }
 
-      // Si no hay MFA → login directo
+      // Sin MFA → login directo
       await finishLogin();
     } catch (err) {
       console.error("[LOGIN FRONT] exception", err);
@@ -340,13 +340,11 @@ const Login: React.FC = () => {
               )}
 
               <button
-                type="button"
-                onClick={() => setDisableConfirmOpen(true)}
+                type="submit"
                 disabled={mfaLoading}
-                className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] text-slate-200 hover:border-rose-500/70 hover:text-rose-200 hover:bg-slate-900/90 transition disabled:opacity-60"
+                className="mt-2 w-full rounded-xl bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <KeyRound className="w-3.5 h-3.5" />
-                {mfaLoading ? "Desactivando..." : "Desactivar MFA"}
+                {mfaLoading ? t.mfaButtonLoading : t.mfaButton}
               </button>
             </form>
           )}
