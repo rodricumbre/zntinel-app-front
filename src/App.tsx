@@ -17,6 +17,7 @@ import Members from "@/components/pages/Members";
 import Metrics from "@/components/pages/Metrics";
 import Logs from "@/components/pages/Logs";
 import SettingsPage from "@/components/pages/SettingsPage";
+import LogoutOverlay from "@/components/layout/LogoutOverlay";
 
 // NUEVOS
 import Register from "@/components/pages/Register";
@@ -43,6 +44,9 @@ const PrivateRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
 const App: React.FC = () => {
   return (
     <BrowserRouter>
+      {/* overlay global: siempre montado, escucha isLoggingOut del contexto */}
+      <LogoutOverlay />
+
       <Routes>
         {/* públicas */}
         <Route path="/login" element={<Login />} />

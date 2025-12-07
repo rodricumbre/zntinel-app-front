@@ -24,6 +24,7 @@ type AuthContextType = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  isLoggingOut: boolean; // ⬅ añadido
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,6 +33,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false); // ⬅ nuevo
 
   // Al cargar la app, intentar hidratar la sesión desde /auth/me
   useEffect(() => {
@@ -69,16 +71,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async () => {
     try {
+      setIsLoggingOut(true);
+
+      // cierra sesión en la API
       await api.post("/auth/logout");
-    } finally {
+
+      // pequeño overlay de 2s
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
       setUser(null);
       setAccount(null);
+
+      // navegación dura para limpiar todo
+      window.location.href = "/login";
+    } catch (e) {
+      console.error("[AUTH] logout error:", e);
+      window.location.href = "/login";
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
   return (
     <AuthContext.Provider
-      value={{ user, account, loading, login, logout }}
+      value={{ user, account, loading, login, logout, isLoggingOut }} // ⬅ incluye flag
     >
       {children}
     </AuthContext.Provider>
