@@ -93,14 +93,14 @@ const [mfaStep, setMfaStep] = useState<"idle" | "init" | "verify">("idle");
           first_name: u.first_name,
           last_name: u.last_name,
           role: row.role,
-          status: "active",                  // de momento todo activo
+          status: "active",
           last_login_at: u.last_login_at ?? null,
           created_at: row.created_at,
           has_2fa: !!u.mfa_enabled,
         };
       });
 
-      setMembers(normalized);
+setMembers(normalized);
       setLimits(data.limits ?? null);
     } catch (e: any) {
       console.error("[MEMBERS] load error:", e);
