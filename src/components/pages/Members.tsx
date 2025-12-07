@@ -69,7 +69,7 @@ const [mfaStep, setMfaStep] = useState<"idle" | "init" | "verify">("idle");
 
 
   useEffect(() => {
-    const load = async () => {
+  const load = async () => {
     try {
       setLoading(true);
       setError(null);
@@ -77,24 +77,23 @@ const [mfaStep, setMfaStep] = useState<"idle" | "init" | "verify">("idle");
       const res = await fetch(`${API_BASE}/members`, {
         credentials: "include",
       });
-      const raw = await res.json();
+      const data: MembersApiResponse = await res.json();
 
-      if (!res.ok || !raw.success) {
-        throw new Error(raw.error || "Error al cargar los miembros");
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Error al cargar los miembros");
       }
 
-      const apiMembers = (raw.members ?? []) as any[];
+      const raw = (data.members ?? []) as any[];
 
-      const normalized: Member[] = apiMembers.map((row) => {
-        const u = row.user || row; // por si el back manda user anidado
-
+      const normalized: Member[] = raw.map((row) => {
+        const u = row.user || {};
         return {
           id: row.id,
           email: u.email,
           first_name: u.first_name,
           last_name: u.last_name,
           role: row.role,
-          status: row.status ?? "active",
+          status: "active",                  // de momento todo activo
           last_login_at: u.last_login_at ?? null,
           created_at: row.created_at,
           has_2fa: !!u.mfa_enabled,
@@ -102,7 +101,7 @@ const [mfaStep, setMfaStep] = useState<"idle" | "init" | "verify">("idle");
       });
 
       setMembers(normalized);
-      setLimits(raw.limits ?? null);
+      setLimits(data.limits ?? null);
     } catch (e: any) {
       console.error("[MEMBERS] load error:", e);
       setError(e?.message || "No se pudieron cargar los miembros.");
