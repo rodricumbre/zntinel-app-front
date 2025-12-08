@@ -5,31 +5,19 @@ import PageCard from "@/components/layout/PageCard";
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "https://api.zntinel.com";
 
-type LogAction = "allowed" | "blocked";
-type ThreatType =
-  | "none"
-  | "sql_injection"
-  | "xss"
-  | "bot"
-  | "lfi"
-  | "rce"
-  | "other";
+type LogAction = "ALLOWED" | "BLOCKED" | string;
 
 type LogEntry = {
   id: string;
   timestamp: string; // ISO
-  domain: string;
-  ip: string;
-  country?: string;
-  method: string;
-  path: string;
-  status: number;
-  action: LogAction;
-  threatType: ThreatType;
+  hostname: string | null;
+  method: string | null;
+  path: string | null;
+  statusCode: number | null;
+  action: LogAction | null;
+  threatType: string | null;
   ruleId?: string | null;
-  bytes?: number;
-  latencyMs?: number;
-  userAgent?: string;
+  country?: string | null;
 };
 
 type LogsApiResponse = {
@@ -47,8 +35,9 @@ const LogsPage: React.FC = () => {
   // filtros
   const [search, setSearch] = useState("");
   const [timeRange, setTimeRange] = useState<TimeRange>("24h");
-  const [actionFilter, setActionFilter] = useState<LogAction | "all">("all");
-  const [threatFilter, setThreatFilter] = useState<ThreatType | "all">("all");
+  const [actionFilter, setActionFilter] =
+    useState<"all" | "ALLOWED" | "BLOCKED">("all");
+  const [threatFilter, setThreatFilter] = useState<string | "all">("all");
 
   // “IA” local
   const [aiQuestion, setAiQuestion] = useState("");
@@ -102,18 +91,23 @@ const LogsPage: React.FC = () => {
 
   const filteredLogs = useMemo(() => {
     return logs.filter((l) => {
-      if (actionFilter !== "all" && l.action !== actionFilter) return false;
-      if (threatFilter !== "all" && l.threatType !== threatFilter) return false;
+      if (actionFilter !== "all") {
+        const a = (l.action || "").toUpperCase();
+        if (a !== actionFilter) return false;
+      }
+
+      if (threatFilter !== "all") {
+        if ((l.threatType || "") !== threatFilter) return false;
+      }
 
       if (search.trim()) {
         const q = search.toLowerCase();
         const haystack = [
-          l.domain,
-          l.ip,
-          l.method,
-          l.path,
-          String(l.status),
-          l.threatType,
+          l.hostname || "",
+          l.method || "",
+          l.path || "",
+          String(l.statusCode ?? ""),
+          l.threatType || "",
           l.ruleId || "",
           l.country || "",
         ]
@@ -144,8 +138,8 @@ const LogsPage: React.FC = () => {
       .map(([value, count]) => ({ value, count }));
   }
 
-  function isSuspiciousPath(path: string): boolean {
-    const p = path.toLowerCase();
+  function isSuspiciousPath(path: string | null): boolean {
+    const p = (path || "").toLowerCase();
     const keywords = [
       "wp-login",
       "xmlrpc",
@@ -170,17 +164,26 @@ const LogsPage: React.FC = () => {
     }
 
     const total = logsInScope.length;
-    const blocked = logsInScope.filter((l) => l.action === "blocked").length;
+    const blocked = logsInScope.filter(
+      (l) => (l.action || "").toUpperCase() === "BLOCKED"
+    ).length;
     const blockedPct = total > 0 ? (blocked / total) * 100 : 0;
 
-    const errors5xx = logsInScope.filter((l) => l.status >= 500);
-    const errors5xxBlocked = errors5xx.filter((l) => l.action === "blocked");
+    const errors5xx = logsInScope.filter(
+      (l) => (l.statusCode || 0) >= 500
+    );
+    const errors5xxBlocked = errors5xx.filter(
+      (l) => (l.action || "").toUpperCase() === "BLOCKED"
+    );
 
     const suspiciousPaths = logsInScope.filter((l) => isSuspiciousPath(l.path));
-    const topIps = formatTop(logsInScope, (l) => l.ip, 5);
-    const topBlockedIps = formatTop(
-      logsInScope.filter((l) => l.action === "blocked"),
-      (l) => l.ip,
+
+    const topHosts = formatTop(logsInScope, (l) => l.hostname || "", 5);
+    const topBlockedHosts = formatTop(
+      logsInScope.filter(
+        (l) => (l.action || "").toUpperCase() === "BLOCKED"
+      ),
+      (l) => l.hostname || "",
       5
     );
     const topRules = formatTop(
@@ -189,8 +192,8 @@ const LogsPage: React.FC = () => {
       5
     );
     const topThreats = formatTop(
-      logsInScope.filter((l) => l.threatType && l.threatType !== "none"),
-      (l) => l.threatType,
+      logsInScope.filter((l) => l.threatType),
+      (l) => l.threatType || "",
       5
     );
 
@@ -220,7 +223,11 @@ const LogsPage: React.FC = () => {
     }
 
     if (suspiciousPaths.length > 0) {
-      const topSuspicious = formatTop(suspiciousPaths, (l) => l.path, 5);
+      const topSuspicious = formatTop(
+        suspiciousPaths,
+        (l) => l.path || "",
+        5
+      );
       lines.push(
         `• Rutas potencialmente sensibles o atacadas (login/admin/etc.):`
       );
@@ -252,32 +259,32 @@ const LogsPage: React.FC = () => {
       );
     }
 
-    if (topIps.length > 0) {
-      lines.push(`• IPs más activas (todo el tráfico):`);
-      for (const ip of topIps) {
+    if (topHosts.length > 0) {
+      lines.push(`• Hosts más activos (todo el tráfico):`);
+      for (const h of topHosts) {
         lines.push(
-          `   - ${ip.value} → ${ip.count.toLocaleString("es-ES")} eventos`
+          `   - ${h.value} → ${h.count.toLocaleString("es-ES")} eventos`
         );
       }
     }
 
-    if (topBlockedIps.length > 0) {
-      lines.push(`• IPs más bloqueadas:`);
-      for (const ip of topBlockedIps) {
+    if (topBlockedHosts.length > 0) {
+      lines.push(`• Hosts con más bloqueos:`);
+      for (const h of topBlockedHosts) {
         lines.push(
-          `   - ${ip.value} → ${ip.count.toLocaleString("es-ES")} bloqueos`
+          `   - ${h.value} → ${h.count.toLocaleString("es-ES")} bloqueos`
         );
       }
-      lines.push(
-        `  Candidatas claras a listas de bloqueo permanentes o reglas específicas en Cloudflare.`
-      );
     }
 
-    // “buscador” de errores clave: 5xx + paths raros + reglas repetidas
     const clave: string[] = [];
 
     if (errors5xx.length > 0) {
-      const top5xxPaths = formatTop(errors5xx, (l) => `${l.domain}${l.path}`, 5);
+      const top5xxPaths = formatTop(
+        errors5xx,
+        (l) => `${l.hostname || ""}${l.path || ""}`,
+        5
+      );
       clave.push(`- Rutas con más errores 5xx:`);
       for (const p of top5xxPaths) {
         clave.push(
@@ -287,12 +294,12 @@ const LogsPage: React.FC = () => {
     }
 
     const repeated404 = logsInScope.filter(
-      (l) => l.status === 404 && isSuspiciousPath(l.path)
+      (l) => l.statusCode === 404 && isSuspiciousPath(l.path)
     );
     if (repeated404.length > 0) {
       const top404 = formatTop(
         repeated404,
-        (l) => `${l.domain}${l.path}`,
+        (l) => `${l.hostname || ""}${l.path || ""}`,
         5
       );
       clave.push(
@@ -315,7 +322,7 @@ const LogsPage: React.FC = () => {
       lines.push("");
       lines.push(`Pregunta del usuario: "${question.trim()}"`);
       lines.push(
-        `→ Usa los puntos anteriores para responderla: céntrate en IPs ruidosas, reglas con más matches y rutas con errores 5xx/404 en recursos sensibles.`
+        `→ Usa los puntos anteriores para responderla: céntrate en hosts ruidosos, reglas con más matches y rutas con errores 5xx/404 en recursos sensibles.`
       );
     }
 
@@ -338,8 +345,8 @@ const LogsPage: React.FC = () => {
     }
   };
 
-  const threatBadge = (t: ThreatType) => {
-    if (t === "none") {
+  const threatBadge = (t: string | null) => {
+    if (!t || t === "none") {
       return (
         <span className="inline-flex items-center rounded-full bg-slate-800/80 px-2 py-0.5 text-[10px] text-slate-300">
           clean
@@ -347,25 +354,26 @@ const LogsPage: React.FC = () => {
       );
     }
 
-    const labelMap: Record<ThreatType, string> = {
-      none: "clean",
+    const labelMap: Record<string, string> = {
       sql_injection: "SQLi",
       xss: "XSS",
       bot: "Bot",
       lfi: "LFI",
       rce: "RCE",
-      other: "Other",
     };
+
+    const label = labelMap[t] || t;
 
     return (
       <span className="inline-flex items-center rounded-full bg-rose-500/15 border border-rose-500/40 px-2 py-0.5 text-[10px] text-rose-200">
-        {labelMap[t] || t}
+        {label}
       </span>
     );
   };
 
-  const actionBadge = (a: LogAction) => {
-    if (a === "blocked") {
+  const actionBadge = (a: LogAction | null) => {
+    const value = (a || "ALLOWED").toUpperCase();
+    if (value === "BLOCKED") {
       return (
         <span className="inline-flex items-center rounded-full bg-rose-500/15 border border-rose-500/40 px-2 py-0.5 text-[10px] text-rose-200">
           BLOCKED
@@ -387,7 +395,7 @@ const LogsPage: React.FC = () => {
           <h1 className="text-xl font-semibold text-slate-50">Logs</h1>
           <p className="text-sm text-slate-400">
             Inspecciona el tráfico reciente y deja que la capa de análisis te
-            resuma los errores clave, IPs ruidosas y rutas sensibles.
+            resuma los errores clave y rutas sensibles.
           </p>
         </div>
 
@@ -413,12 +421,12 @@ const LogsPage: React.FC = () => {
 
           <div className="flex items-center gap-1.5">
             <span className="text-slate-400">Acción:</span>
-            {(["all", "allowed", "blocked"] as const).map((val) => (
+            {(["all", "ALLOWED", "BLOCKED"] as const).map((val) => (
               <button
                 key={val}
                 type="button"
                 onClick={() =>
-                  setActionFilter(val === "all" ? "all" : (val as LogAction))
+                  setActionFilter(val === "all" ? "all" : val)
                 }
                 className={`px-2 py-1 rounded-full border transition ${
                   actionFilter === val ||
@@ -427,7 +435,7 @@ const LogsPage: React.FC = () => {
                     : "border-slate-700 text-slate-400 hover:border-sky-400/60 hover:text-sky-200"
                 }`}
               >
-                {val === "all" ? "Todas" : val === "allowed" ? "Allowed" : "Blocked"}
+                {val === "all" ? "Todas" : val}
               </button>
             ))}
           </div>
@@ -446,7 +454,7 @@ const LogsPage: React.FC = () => {
             <input
               type="text"
               className="w-full md:flex-1 rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-xs text-slate-100 outline-none ring-0 transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/60"
-              placeholder="Buscar por dominio, IP, URL, regla, país..."
+              placeholder="Buscar por dominio, URL, regla, país..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -454,7 +462,7 @@ const LogsPage: React.FC = () => {
               className="w-full md:w-40 rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-xs text-slate-100 outline-none ring-0 transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/60"
               value={threatFilter}
               onChange={(e) =>
-                setThreatFilter(e.target.value as ThreatType | "all")
+                setThreatFilter(e.target.value as string | "all")
               }
             >
               <option value="all">Todos los tipos</option>
@@ -493,7 +501,6 @@ const LogsPage: React.FC = () => {
                     <th className="px-3 py-2 text-left font-medium">
                       Dominio / URL
                     </th>
-                    <th className="px-3 py-2 text-left font-medium">IP</th>
                     <th className="px-3 py-2 text-left font-medium">
                       Acción
                     </th>
@@ -527,16 +534,19 @@ const LogsPage: React.FC = () => {
                       </td>
                       <td className="px-3 py-2 text-slate-100">
                         <div className="flex flex-col gap-0.5">
-                          <span className="font-medium">{log.domain}</span>
+                          <span className="font-medium">
+                            {log.hostname || "—"}
+                          </span>
                           <span className="text-[10px] text-slate-400">
-                            {log.method} {log.path}
+                            {(log.method || "GET") +
+                              " " +
+                              (log.path || "/")}
                           </span>
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-slate-200 whitespace-nowrap">
-                        {log.ip}
+                      <td className="px-3 py-2">
+                        {actionBadge(log.action)}
                       </td>
-                      <td className="px-3 py-2">{actionBadge(log.action)}</td>
                       <td className="px-3 py-2">
                         {threatBadge(log.threatType)}
                       </td>
@@ -544,7 +554,7 @@ const LogsPage: React.FC = () => {
                         {log.ruleId || "—"}
                       </td>
                       <td className="px-3 py-2 text-slate-300">
-                        {log.status}
+                        {log.statusCode ?? "—"}
                       </td>
                       <td className="px-3 py-2 text-slate-300">
                         {log.country || "—"}
@@ -560,7 +570,7 @@ const LogsPage: React.FC = () => {
         {/* Panel “IA” local */}
         <PageCard
           title="Análisis de errores clave"
-          subtitle="Resumen automático de IPs ruidosas, rutas sensibles, reglas calientes y errores 5xx."
+          subtitle="Resumen automático de hosts ruidosos, rutas sensibles, reglas calientes y errores 5xx."
         >
           <div className="space-y-3">
             <textarea
@@ -599,10 +609,10 @@ const LogsPage: React.FC = () => {
 
             {!aiAnswer && !aiError && (
               <p className="text-[11px] text-slate-500">
-                Tip: filtra por <span className="text-slate-300">Blocked</span>{" "}
-                + tipo de amenaza (p.ej. SQLi) y luego genera el análisis para
-                ver fácilmente IPs, rutas y reglas críticas sobre las que
-                deberías actuar.
+                Tip: filtra por{" "}
+                <span className="text-slate-300">BLOCKED</span> + tipo de
+                amenaza y luego genera el análisis para ver fácilmente hosts,
+                rutas y reglas críticas sobre las que deberías actuar.
               </p>
             )}
           </div>
