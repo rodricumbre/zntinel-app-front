@@ -1,29 +1,13 @@
 // src/components/pages/MetricsPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
 import PageCard from "@/components/layout/PageCard";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "https://api.zntinel.com";
 
-type TimeRange = "1h" | "24h" | "7d" | "30d";
+type MetricsRange = "1h" | "24h" | "7d" | "30d";
 
-type Totals = {
+type MetricsTotals = {
   totalRequests: number;
   blockedRequests: number;
   error5xx: number;
@@ -31,7 +15,7 @@ type Totals = {
   bandwidthBytes: number;
 };
 
-type PerDomain = {
+type MetricsPerDomain = {
   domain: string;
   total: number;
   blocked: number;
@@ -39,68 +23,102 @@ type PerDomain = {
   bandwidthBytes: number;
 };
 
-type TimelinePoint = {
+type MetricsTimelinePoint = {
   bucket: string;
   total: number;
   blocked: number;
 };
 
-type SimpleCount = {
+type MetricsLabelCount = {
   label: string;
   count: number;
 };
 
-type StatusCount = {
+type MetricsStatusCount = {
   status: number;
   count: number;
 };
 
-type PathStat = {
+type MetricsTopPath = {
   path: string;
   count: number;
   blocked: number;
 };
 
 type MetricsOverview = {
-  range: TimeRange;
-  totals: Totals;
-  perDomain: PerDomain[];
-  trafficTimeline: TimelinePoint[];
-  threatBreakdown: SimpleCount[];
-  statusBreakdown: StatusCount[];
-  countryBreakdown: SimpleCount[];
-  topPaths: PathStat[];
+  range: MetricsRange;
+  totals: MetricsTotals;
+  perDomain: MetricsPerDomain[];
+  trafficTimeline: MetricsTimelinePoint[];
+  threatBreakdown: MetricsLabelCount[];
+  statusBreakdown: MetricsStatusCount[];
+  countryBreakdown: MetricsLabelCount[];
+  topPaths: MetricsTopPath[];
 };
 
-type MetricsOverviewApiResponse = {
+type MetricsOverviewResponse = {
   success: boolean;
   metrics: MetricsOverview;
 };
 
-const bytesToHuman = (bytes: number): string => {
-  if (!bytes || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let v = bytes;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v.toFixed(1)} ${units[i]}`;
-};
-
-const formatPct = (num: number, den: number): string => {
-  if (!den || den <= 0) return "0%";
-  return `${((num / den) * 100).toFixed(1)}%`;
+type DomainSummary = {
+  id: string;
+  hostname: string;
 };
 
 const MetricsPage: React.FC = () => {
-  const [range, setRange] = useState<TimeRange>("24h");
+  const [range, setRange] = useState<MetricsRange>("30d");
+  const [metrics, setMetrics] = useState<MetricsOverview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [overview, setOverview] = useState<MetricsOverview | null>(null);
+
+  const [domains, setDomains] = useState<DomainSummary[]>([]);
   const [selectedDomain, setSelectedDomain] = useState<string>("all");
 
+  // Cargar dominios para el selector
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDomains() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/domains`, {
+          method: "GET",
+          credentials: "include",
+        });
+
+        const data = (await res.json()) as any;
+
+        if (!res.ok || data.success === false) {
+          throw new Error(data?.error || `HTTP ${res.status} en /domains`);
+        }
+
+        const list: DomainSummary[] = (data.domains || []).map(
+          (d: any): DomainSummary => ({
+            id: d.id,
+            hostname: d.hostname || d.domain || "unknown",
+          })
+        );
+
+        if (!cancelled) {
+          setDomains(list);
+          if (list.length > 0 && selectedDomain === "all") {
+            setSelectedDomain(list[0].hostname);
+          }
+        }
+      } catch (e: any) {
+        console.error("[METRICS] error loading domains", e);
+      }
+    }
+
+    loadDomains();
+    return () => {
+      cancelled = true;
+    };
+    // solo al montar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Cargar métricas cuando cambia el rango
   useEffect(() => {
     let cancelled = false;
 
@@ -117,7 +135,7 @@ const MetricsPage: React.FC = () => {
           credentials: "include",
         });
 
-        const data = (await res.json()) as MetricsOverviewApiResponse | any;
+        const data = (await res.json()) as MetricsOverviewResponse | any;
 
         if (!res.ok || data.success === false) {
           throw new Error(
@@ -125,60 +143,13 @@ const MetricsPage: React.FC = () => {
           );
         }
 
-        const raw = data.metrics || data;
-
-        const safe: MetricsOverview = {
-          range: (raw.range as TimeRange) || range,
-          totals: {
-            totalRequests: Number(raw?.totals?.totalRequests ?? 0),
-            blockedRequests: Number(raw?.totals?.blockedRequests ?? 0),
-            error5xx: Number(raw?.totals?.error5xx ?? 0),
-            uniqueIps: Number(raw?.totals?.uniqueIps ?? 0),
-            bandwidthBytes: Number(raw?.totals?.bandwidthBytes ?? 0),
-          },
-          perDomain: Array.isArray(raw?.perDomain) ? raw.perDomain : [],
-          trafficTimeline: Array.isArray(raw?.trafficTimeline)
-            ? raw.trafficTimeline
-            : [],
-          threatBreakdown: Array.isArray(raw?.threatBreakdown)
-            ? raw.threatBreakdown.map((t: any) => ({
-                label: t.label ?? t.type ?? "other",
-                count: Number(t.count ?? 0),
-              }))
-            : [],
-          statusBreakdown: Array.isArray(raw?.statusBreakdown)
-            ? raw.statusBreakdown.map((s: any) => ({
-                status: Number(s.status ?? 0),
-                count: Number(s.count ?? 0),
-              }))
-            : [],
-          countryBreakdown: Array.isArray(raw?.countryBreakdown)
-            ? raw.countryBreakdown.map((c: any) => ({
-                label: c.label ?? c.country ?? "??",
-                count: Number(c.count ?? 0),
-              }))
-            : [],
-          topPaths: Array.isArray(raw?.topPaths)
-            ? raw.topPaths.map((p: any) => ({
-                path: p.path ?? "/",
-                count: Number(p.count ?? 0),
-                blocked: Number(p.blocked ?? 0),
-              }))
-            : [],
-        };
-
         if (!cancelled) {
-          setOverview(safe);
-          const domains = safe.perDomain.map((d) => d.domain);
-          if (selectedDomain !== "all" && !domains.includes(selectedDomain)) {
-            setSelectedDomain("all");
-          }
+          setMetrics(data.metrics);
         }
       } catch (e: any) {
         console.error("[METRICS] error", e);
         if (!cancelled) {
           setError(e?.message || "Error cargando métricas");
-          setOverview(null);
         }
       } finally {
         if (!cancelled) {
@@ -193,28 +164,31 @@ const MetricsPage: React.FC = () => {
     };
   }, [range]);
 
-  const totals = overview?.totals || {
-    totalRequests: 0,
-    blockedRequests: 0,
-    error5xx: 0,
-    uniqueIps: 0,
-    bandwidthBytes: 0,
+  // Filtrado por dominio solo para algunos bloques
+  const activeDomainStats = useMemo(() => {
+    if (!metrics) return null;
+    if (selectedDomain === "all") return null;
+    return (
+      metrics.perDomain.find((d) => d.domain === selectedDomain) || null
+    );
+  }, [metrics, selectedDomain]);
+
+  const trafficTimeline = useMemo(() => {
+    if (!metrics) return [];
+    return metrics.trafficTimeline;
+  }, [metrics]);
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes || bytes <= 0) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let value = bytes;
+    let idx = 0;
+    while (value >= 1024 && idx < units.length - 1) {
+      value = value / 1024;
+      idx++;
+    }
+    return `${value.toFixed(1)} ${units[idx]}`;
   };
-
-  const effectivePerDomain = useMemo(() => {
-    if (!overview) return [];
-    if (selectedDomain === "all") return overview.perDomain;
-    return overview.perDomain.filter((d) => d.domain === selectedDomain);
-  }, [overview, selectedDomain]);
-
-  const effectiveTimeline = useMemo(() => {
-    if (!overview) return [];
-    if (selectedDomain === "all") return overview.trafficTimeline;
-    // si luego tienes timeline por dominio, aquí lo filtras
-    return overview.trafficTimeline;
-  }, [overview, selectedDomain]);
-
-  const PIE_COLORS = ["#22c55e", "#fb7185", "#38bdf8", "#a855f7", "#f97316"];
 
   return (
     <div className="space-y-6">
@@ -223,15 +197,16 @@ const MetricsPage: React.FC = () => {
         <div>
           <h1 className="text-xl font-semibold text-slate-50">Métricas</h1>
           <p className="text-sm text-slate-400">
-            Visión global del tráfico, bloqueos, errores y consumo por dominio
-            en tu cuenta Zntinel.
+            Visión global del tráfico, bloqueos, errores y consumo en tu cuenta
+            Zntinel.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2 text-[11px]">
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center text-[11px]">
+          {/* Rango temporal */}
           <div className="flex items-center gap-1.5">
             <span className="text-slate-400">Rango:</span>
-            {(["1h", "24h", "7d", "30d"] as TimeRange[]).map((r) => (
+            {(["1h", "24h", "7d", "30d"] as MetricsRange[]).map((r) => (
               <button
                 key={r}
                 type="button"
@@ -247,19 +222,27 @@ const MetricsPage: React.FC = () => {
             ))}
           </div>
 
+          {/* Selector de dominio (solo afecta a algunos bloques) */}
           <div className="flex items-center gap-1.5">
             <span className="text-slate-400">Dominio:</span>
             <select
-              className="rounded-full border border-slate-700 bg-slate-950/80 px-3 py-1.5 text-[11px] text-slate-100 outline-none ring-0 transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/60"
+              className="rounded-full border border-slate-700 bg-slate-950/80 px-3 py-1.5 text-[11px] text-slate-100 outline-none ring-0 transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/60 min-w-[150px]"
               value={selectedDomain}
               onChange={(e) => setSelectedDomain(e.target.value)}
             >
-              <option value="all">Todos</option>
-              {overview?.perDomain.map((d) => (
-                <option key={d.domain} value={d.domain}>
-                  {d.domain}
-                </option>
-              ))}
+              {domains.length === 0 && (
+                <option value="all">Sin dominios</option>
+              )}
+              {domains.length > 0 && (
+                <>
+                  <option value="all">Todos los dominios</option>
+                  {domains.map((d) => (
+                    <option key={d.id} value={d.hostname}>
+                      {d.hostname}
+                    </option>
+                  ))}
+                </>
+              )}
             </select>
           </div>
         </div>
@@ -273,405 +256,349 @@ const MetricsPage: React.FC = () => {
         <p className="text-xs text-red-400">{error}</p>
       )}
 
-      {/* KPIs */}
-      {!loading && !error && (
-        <motion.div
-          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-        >
-          <PageCard>
-            <div className="flex flex-col gap-1">
-              <span className="text-[11px] text-slate-400">
-                Peticiones totales
-              </span>
-              <span className="text-2xl font-semibold text-slate-50">
-                {totals.totalRequests.toLocaleString("es-ES")}
-              </span>
-              <span className="text-[11px] text-slate-500">
-                IPs únicas:{" "}
-                <span className="text-slate-200">
-                  {totals.uniqueIps.toLocaleString("es-ES")}
-                </span>
-              </span>
-            </div>
-          </PageCard>
-
-          <PageCard>
-            <div className="flex flex-col gap-1">
-              <span className="text-[11px] text-slate-400">Bloqueos</span>
-              <span className="text-2xl font-semibold text-rose-400">
-                {totals.blockedRequests.toLocaleString("es-ES")}
-              </span>
-              <span className="text-[11px] text-slate-500">
-                {formatPct(totals.blockedRequests, totals.totalRequests)} del
-                tráfico total
-              </span>
-            </div>
-          </PageCard>
-
-          <PageCard>
-            <div className="flex flex-col gap-1">
-              <span className="text-[11px] text-slate-400">Errores 5xx</span>
-              <span className="text-2xl font-semibold text-amber-300">
-                {totals.error5xx.toLocaleString("es-ES")}
-              </span>
-              <span className="text-[11px] text-slate-500">
-                {formatPct(totals.error5xx, totals.totalRequests)} del total
-              </span>
-            </div>
-          </PageCard>
-
-          <PageCard>
-            <div className="flex flex-col gap-1">
-              <span className="text-[11px] text-slate-400">
-                Ancho de banda
-              </span>
-              <span className="text-2xl font-semibold text-sky-300">
-                {bytesToHuman(totals.bandwidthBytes)}
-              </span>
-              <span className="text-[11px] text-slate-500">
-                Tráfico servido por Zntinel
-              </span>
-            </div>
-          </PageCard>
-        </motion.div>
+      {!loading && !error && !metrics && (
+        <p className="text-xs text-slate-400">
+          No hay datos de métricas para el rango seleccionado.
+        </p>
       )}
 
-      {/* Timeline + dominios */}
-      {!loading && !error && (
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)] gap-4">
-          <PageCard
-            title="Tráfico en el tiempo"
-            subtitle="Picos de tráfico y bloqueos por franja."
-          >
-            <div className="h-64 w-full">
-              {effectiveTimeline.length === 0 ? (
-                <p className="text-[11px] text-slate-500">
+      {metrics && (
+        <>
+          {/* Tarjetas de resumen */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <PageCard
+              title="Peticiones totales"
+              subtitle={`IPs únicas: ${metrics.totals.uniqueIps}`}
+            >
+              <p className="text-3xl font-semibold text-slate-50">
+                {metrics.totals.totalRequests.toLocaleString("es-ES")}
+              </p>
+            </PageCard>
+
+            <PageCard
+              title="Bloqueos"
+              subtitle={
+                metrics.totals.totalRequests > 0
+                  ? `${(
+                      (metrics.totals.blockedRequests /
+                        metrics.totals.totalRequests) *
+                      100
+                    ).toFixed(1)}% del tráfico total`
+                  : "0% del tráfico total"
+              }
+            >
+              <p className="text-3xl font-semibold text-rose-400">
+                {metrics.totals.blockedRequests.toLocaleString("es-ES")}
+              </p>
+            </PageCard>
+
+            <PageCard
+              title="Errores 5xx"
+              subtitle={
+                metrics.totals.totalRequests > 0
+                  ? `${(
+                      (metrics.totals.error5xx /
+                        metrics.totals.totalRequests) *
+                      100
+                    ).toFixed(1)}% del total`
+                  : "0% del total"
+              }
+            >
+              <p className="text-3xl font-semibold text-amber-300">
+                {metrics.totals.error5xx.toLocaleString("es-ES")}
+              </p>
+            </PageCard>
+
+            <PageCard
+              title="Ancho de banda"
+              subtitle="Tráfico servido por Zntinel"
+            >
+              <p className="text-3xl font-semibold text-sky-300">
+                {formatBytes(metrics.totals.bandwidthBytes)}
+              </p>
+            </PageCard>
+          </div>
+
+          {/* Tráfico en el tiempo + tráfico por dominio */}
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)] gap-4">
+            <PageCard
+              title="Tráfico en el tiempo"
+              subtitle="Picos de tráfico y bloqueos por franja."
+            >
+              {trafficTimeline.length === 0 ? (
+                <p className="text-xs text-slate-500">
                   No hay datos suficientes para el rango seleccionado.
                 </p>
               ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={effectiveTimeline}>
-                    <defs>
-                      <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.35} />
-                        <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient
-                        id="blockedGradient"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
+                <div className="mt-2 h-56 flex items-end gap-1 overflow-x-auto pr-1">
+                  {trafficTimeline.map((p) => {
+                    const max =
+                      Math.max(
+                        ...trafficTimeline.map((x) => x.total || 0),
+                        1
+                      ) || 1;
+                    const heightTotal = (p.total / max) * 100;
+                    const heightBlocked = (p.blocked / max) * 100;
+                    return (
+                      <div
+                        key={p.bucket}
+                        className="flex flex-col items-center min-w-[22px]"
                       >
-                        <stop offset="5%" stopColor="#fb7185" stopOpacity={0.45} />
-                        <stop offset="95%" stopColor="#fb7185" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#1e293b"
-                      opacity={0.6}
-                    />
-                    <XAxis
-                      dataKey="bucket"
-                      tick={{ fontSize: 10, fill: "#94a3b8" }}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: "#94a3b8" }}
-                      allowDecimals={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#020617",
-                        borderRadius: 8,
-                        border: "1px solid #1e293b",
-                        fontSize: 11,
-                      }}
-                    />
-                    <Legend />
-                    <Area
-                      type="monotone"
-                      dataKey="total"
-                      name="Total"
-                      stroke="#38bdf8"
-                      fill="url(#totalGradient)"
-                      strokeWidth={1.8}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="blocked"
-                      name="Blocked"
-                      stroke="#fb7185"
-                      fill="url(#blockedGradient)"
-                      strokeWidth={1.8}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </PageCard>
-
-          <PageCard
-            title="Tráfico por dominio"
-            subtitle="Comparativa de volumen, bloqueos y errores."
-          >
-            {effectivePerDomain.length === 0 ? (
-              <p className="text-[11px] text-slate-500">
-                No hay dominios con datos en este rango.
-              </p>
-            ) : (
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={effectivePerDomain}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#1e293b"
-                      opacity={0.6}
-                    />
-                    <XAxis
-                      dataKey="domain"
-                      tick={{ fontSize: 10, fill: "#94a3b8" }}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: "#94a3b8" }}
-                      allowDecimals={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#020617",
-                        borderRadius: 8,
-                        border: "1px solid #1e293b",
-                        fontSize: 11,
-                      }}
-                    />
-                    <Legend />
-                    <Bar dataKey="total" name="Total" stackId="a" fill="#38bdf8" />
-                    <Bar
-                      dataKey="blocked"
-                      name="Blocked"
-                      stackId="a"
-                      fill="#fb7185"
-                    />
-                    <Bar
-                      dataKey="error5xx"
-                      name="5xx"
-                      stackId="a"
-                      fill="#facc15"
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </PageCard>
-        </div>
-      )}
-
-      {/* 3ª fila – amenazas / países / status */}
-      {!loading && !error && overview && (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          <PageCard
-            title="Tipos de amenaza"
-            subtitle="Distribución de ataques detectados."
-          >
-            {overview.threatBreakdown.length === 0 ? (
-              <p className="text-[11px] text-slate-500">
-                No se han clasificado amenazas en este rango.
-              </p>
-            ) : (
-              <div className="flex flex-col md:flex-row md:items-center gap-3">
-                <div className="h-48 md:flex-1">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={overview.threatBreakdown}
-                        dataKey="count"
-                        nameKey="label"
-                        outerRadius={70}
-                        innerRadius={35}
-                        paddingAngle={3}
-                      >
-                        {overview.threatBreakdown.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={PIE_COLORS[index % PIE_COLORS.length]}
+                        <div className="relative w-2.5 rounded-full bg-slate-800/70 overflow-hidden h-40 flex flex-col justify-end">
+                          <div
+                            className="w-full bg-sky-500/70 transition-all"
+                            style={{ height: `${heightTotal}%` }}
                           />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#020617",
-                          borderRadius: 8,
-                          border: "1px solid #1e293b",
-                          fontSize: 11,
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+                          {p.blocked > 0 && (
+                            <div
+                              className="w-full bg-rose-500/80 absolute bottom-0 transition-all"
+                              style={{ height: `${heightBlocked}%` }}
+                            />
+                          )}
+                        </div>
+                        <span className="mt-1 text-[9px] text-slate-500">
+                          {p.bucket}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="md:w-40 space-y-1">
-                  {overview.threatBreakdown.map((t, i) => (
-                    <div
-                      key={t.label}
-                      className="flex items-center justify-between text-[11px] text-slate-300"
-                    >
-                      <span className="flex items-center gap-1">
-                        <span
-                          className="inline-block h-2 w-2 rounded-full"
-                          style={{
-                            backgroundColor:
-                              PIE_COLORS[i % PIE_COLORS.length],
-                          }}
-                        />
-                        {t.label}
-                      </span>
-                      <span className="text-slate-400">
-                        {t.count.toLocaleString("es-ES")}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </PageCard>
+              )}
+            </PageCard>
 
-          <PageCard
-            title="País origen tráfico"
-            subtitle="Top países por número de peticiones."
-          >
-            {overview.countryBreakdown.length === 0 ? (
-              <p className="text-[11px] text-slate-500">
-                No hay información de país en este rango.
-              </p>
-            ) : (
-              <div className="space-y-2 text-[11px]">
-                {overview.countryBreakdown.slice(0, 8).map((c) => (
-                  <div
-                    key={c.label}
-                    className="flex items-center justify-between gap-2"
-                  >
-                    <span className="text-slate-300">{c.label}</span>
-                    <div className="flex items-center gap-2 flex-1">
-                      <div className="h-1.5 flex-1 rounded-full bg-slate-800 overflow-hidden">
+            <PageCard
+              title="Tráfico por dominio"
+              subtitle="Comparativa de volumen, bloqueos y errores."
+            >
+              <div className="mt-2 space-y-2 max-h-64 overflow-auto pr-1">
+                {metrics.perDomain.length === 0 && (
+                  <p className="text-xs text-slate-500">
+                    No hay datos de dominios para este rango.
+                  </p>
+                )}
+
+                {metrics.perDomain.map((d) => {
+                  const pctBlocked =
+                    d.total > 0 ? (d.blocked / d.total) * 100 : 0;
+                  const pct5xx =
+                    d.total > 0 ? (d.error5xx / d.total) * 100 : 0;
+
+                  return (
+                    <div
+                      key={d.domain}
+                      className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2 text-[11px]"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-slate-100">
+                          {d.domain}
+                        </span>
+                        <span className="text-slate-400">
+                          {d.total.toLocaleString("es-ES")} req
+                        </span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-900 overflow-hidden mb-1">
                         <div
-                          className="h-full bg-sky-500"
-                          style={{
-                            width: formatPct(
-                              c.count,
-                              overview.countryBreakdown[0].count || 1
-                            ),
-                          }}
+                          className="h-full bg-sky-500/60"
+                          style={{ width: "100%" }}
+                        />
+                        <div
+                          className="h-full bg-rose-500/80"
+                          style={{ width: `${pctBlocked}%` }}
                         />
                       </div>
-                      <span className="text-slate-400">
-                        {c.count.toLocaleString("es-ES")}
-                      </span>
+                      <div className="flex justify-between text-[10px] text-slate-400">
+                        <span>
+                          Bloqueos:{" "}
+                          <span className="text-rose-300">
+                            {d.blocked.toLocaleString("es-ES")} (
+                            {pctBlocked.toFixed(1)}%)
+                          </span>
+                        </span>
+                        <span>
+                          5xx:{" "}
+                          <span className="text-amber-300">
+                            {d.error5xx.toLocaleString("es-ES")} (
+                            {pct5xx.toFixed(1)}%)
+                          </span>
+                        </span>
+                      </div>
                     </div>
+                  );
+                })}
+              </div>
+            </PageCard>
+          </div>
+
+          {/* Tablas avanzadas: paths, reglas, países, status */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <PageCard
+              title={
+                selectedDomain === "all"
+                  ? "Rutas más activas (toda la cuenta)"
+                  : `Rutas más activas (${selectedDomain})`
+              }
+              subtitle="Volumen y ratio de bloqueo por path."
+            >
+              <div className="max-h-64 overflow-auto">
+                <table className="min-w-full text-[11px]">
+                  <thead className="text-slate-400 border-b border-slate-800/80">
+                    <tr>
+                      <th className="px-2 py-1 text-left font-medium">
+                        Path
+                      </th>
+                      <th className="px-2 py-1 text-right font-medium">
+                        Hits
+                      </th>
+                      <th className="px-2 py-1 text-right font-medium">
+                        Bloqueos
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metrics.topPaths.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={3}
+                          className="px-2 py-2 text-slate-500"
+                        >
+                          No hay rutas registradas en este rango.
+                        </td>
+                      </tr>
+                    )}
+                    {metrics.topPaths.map((p) => {
+                      const pctBlocked =
+                        p.count > 0 ? (p.blocked / p.count) * 100 : 0;
+                      return (
+                        <tr
+                          key={p.path}
+                          className="border-b border-slate-800/60 last:border-0 hover:bg-slate-900/40 transition"
+                        >
+                          <td className="px-2 py-1 text-slate-100">
+                            {p.path}
+                          </td>
+                          <td className="px-2 py-1 text-right text-slate-300">
+                            {p.count.toLocaleString("es-ES")}
+                          </td>
+                          <td className="px-2 py-1 text-right">
+                            <span className="text-rose-300">
+                              {p.blocked.toLocaleString("es-ES")} (
+                              {pctBlocked.toFixed(1)}%)
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </PageCard>
+
+            <PageCard
+              title="Distribución de errores y países"
+              subtitle="Status más frecuentes y países de origen."
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
+                <div>
+                  <h3 className="text-slate-200 font-medium mb-1">
+                    Status codes
+                  </h3>
+                  <div className="max-h-48 overflow-auto">
+                    {metrics.statusBreakdown.length === 0 && (
+                      <p className="text-slate-500 text-xs">
+                        No hay códigos registrados.
+                      </p>
+                    )}
+                    {metrics.statusBreakdown.map((s) => (
+                      <div
+                        key={s.status}
+                        className="flex items-center justify-between py-0.5"
+                      >
+                        <span className="text-slate-300">
+                          {s.status}
+                        </span>
+                        <span className="text-slate-400">
+                          {s.count.toLocaleString("es-ES")}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-          </PageCard>
+                </div>
 
+                <div>
+                  <h3 className="text-slate-200 font-medium mb-1">
+                    País de origen
+                  </h3>
+                  <div className="max-h-48 overflow-auto">
+                    {metrics.countryBreakdown.length === 0 && (
+                      <p className="text-slate-500 text-xs">
+                        No hay países registrados.
+                      </p>
+                    )}
+                    {metrics.countryBreakdown.map((c) => (
+                      <div
+                        key={c.label}
+                        className="flex items-center justify-between py-0.5"
+                      >
+                        <span className="text-slate-300">
+                          {c.label}
+                        </span>
+                        <span className="text-slate-400">
+                          {c.count.toLocaleString("es-ES")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </PageCard>
+          </div>
+
+          {/* Reglas calientes */}
           <PageCard
-            title="Códigos de estado"
-            subtitle="Distribución de respuestas HTTP."
+            title="Reglas / firmas más activas"
+            subtitle="Basado en cf_rule_id disparado en los logs."
           >
-            {overview.statusBreakdown.length === 0 ? (
-              <p className="text-[11px] text-slate-500">
-                No hay respuestas registradas en este rango.
-              </p>
-            ) : (
-              <div className="h-48 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={overview.statusBreakdown}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="#1e293b"
-                      opacity={0.6}
-                    />
-                    <XAxis
-                      dataKey="status"
-                      tick={{ fontSize: 10, fill: "#94a3b8" }}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: "#94a3b8" }}
-                      allowDecimals={false}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#020617",
-                        borderRadius: 8,
-                        border: "1px solid #1e293b",
-                        fontSize: 11,
-                      }}
-                    />
-                    <Bar dataKey="count" name="Eventos" fill="#38bdf8" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </PageCard>
-        </div>
-      )}
-
-      {/* Top rutas */}
-      {!loading && !error && overview && (
-        <PageCard
-          title="Rutas más activas"
-          subtitle="Endpoints con más tráfico y bloqueos."
-        >
-          {overview.topPaths.length === 0 ? (
-            <p className="text-[11px] text-slate-500">
-              No hay rutas destacadas para este rango.
-            </p>
-          ) : (
-            <div className="border border-slate-800/80 rounded-xl overflow-auto bg-slate-950/60 max-h-[260px]">
+            <div className="max-h-64 overflow-auto">
               <table className="min-w-full text-[11px]">
-                <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800/80">
+                <thead className="text-slate-400 border-b border-slate-800/80">
                   <tr>
-                    <th className="px-3 py-2 text-left font-medium">Ruta</th>
-                    <th className="px-3 py-2 text-left font-medium">Hits</th>
-                    <th className="px-3 py-2 text-left font-medium">
-                      Bloqueos
+                    <th className="px-2 py-1 text-left font-medium">
+                      Regla
                     </th>
-                    <th className="px-3 py-2 text-left font-medium">
-                      % bloqueado
+                    <th className="px-2 py-1 text-right font-medium">
+                      Eventos
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {overview.topPaths.slice(0, 30).map((p) => {
-                    const pct = formatPct(p.blocked, p.count);
-                    return (
-                      <tr
-                        key={p.path}
-                        className="border-b border-slate-800/70 last:border-0 hover:bg-slate-900/40 transition"
+                  {metrics.threatBreakdown.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={2}
+                        className="px-2 py-2 text-slate-500"
                       >
-                        <td className="px-3 py-2 text-slate-200">
-                          <code className="text-[10px] break-all">
-                            {p.path}
-                          </code>
-                        </td>
-                        <td className="px-3 py-2 text-slate-300 whitespace-nowrap">
-                          {p.count.toLocaleString("es-ES")}
-                        </td>
-                        <td className="px-3 py-2 text-slate-300 whitespace-nowrap">
-                          {p.blocked.toLocaleString("es-ES")}
-                        </td>
-                        <td className="px-3 py-2 text-slate-300 whitespace-nowrap">
-                          {pct}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                        No hay reglas registradas para este rango.
+                      </td>
+                    </tr>
+                  )}
+                  {metrics.threatBreakdown.map((r) => (
+                    <tr
+                      key={r.label}
+                      className="border-b border-slate-800/60 last:border-0 hover:bg-slate-900/40 transition"
+                    >
+                      <td className="px-2 py-1 text-slate-100">
+                        {r.label}
+                      </td>
+                      <td className="px-2 py-1 text-right text-slate-300">
+                        {r.count.toLocaleString("es-ES")}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
-          )}
-        </PageCard>
+          </PageCard>
+        </>
       )}
     </div>
   );
