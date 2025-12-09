@@ -68,6 +68,7 @@ const [mfaCode, setMfaCode] = useState("");
 const [mfaError, setMfaError] = useState<string | null>(null);
 const [mfaStep, setMfaStep] = useState<"idle" | "init" | "verify">("idle");
 const [disableConfirmOpen, setDisableConfirmOpen] = useState(false);
+const [inviteModalOpen, setInviteModalOpen] = useState(false);
 
 
 
@@ -81,7 +82,6 @@ const [disableConfirmOpen, setDisableConfirmOpen] = useState(false);
         credentials: "include",
       });
       const data: MembersApiResponse = await res.json();
-      const [inviteModalOpen, setInviteModalOpen] = useState(false);
 
 
       if (!res.ok || !data.success) {
